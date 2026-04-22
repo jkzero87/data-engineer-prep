@@ -1,10 +1,29 @@
-def leer_lineas(archivo):
-    with open(archivo, "r") as f:
-        for linea in f:
-            yield linea.strip()
+persona = []
 
-for linea in leer_lineas("datos.csv"):
-    print(linea)
+with open("datos.csv", "r") as archivo:
+    next(archivo) # Skip the header line
 
-generador = leer_lineas("datos.csv")
-print(type(generador))
+    for linea in archivo:
+        nombre, edad, ciudad = linea.strip().split(",")
+
+        try:
+            edad = int(edad)
+     
+        except ValueError:
+            print(f"Error: La edad '{edad}' no es un número válido. Se omitirá esta entrada.")  
+            continue
+        
+
+        persona.append({
+            "nombre": nombre,
+            "edad": edad,
+            "ciudad": ciudad
+        })
+
+en_bogota = [p for p in persona if p["ciudad"] == "Bogota"]     
+        
+if en_bogota:
+    print(f"Personas en Bogotá: {en_bogota}")
+
+else:    
+    print("No se encontraron personas en Bogotá.")     
