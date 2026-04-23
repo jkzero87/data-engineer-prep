@@ -1,29 +1,24 @@
-persona = []
+# Define la función generadora
+def leer_personas(archivo):
+    with open(archivo, "r") as f:
+        next(f)  # saltar el header
+        for linea in f:
+            nombre, edad, ciudad = linea.strip().split(",")
+            try:
+                edad = int(edad)
+            except ValueError:
+                print(f"Edad inválida '{edad}', se omite la fila")
+                continue
+            yield {
+                "nombre": nombre,
+                "edad": edad,
+                "ciudad": ciudad
+            }
 
-with open("datos.csv", "r") as archivo:
-    next(archivo) # Skip the header line
+# Consumir el generador y construir lista de personas
+personas = [p for p in leer_personas("datos.csv")]
 
-    for linea in archivo:
-        nombre, edad, ciudad = linea.strip().split(",")
+# Filtrar bogotanos
+bogotanos = [p for p in personas if p["ciudad"] == "Bogota"]
 
-        try:
-            edad = int(edad)
-     
-        except ValueError:
-            print(f"Error: La edad '{edad}' no es un número válido. Se omitirá esta entrada.")  
-            continue
-        
-
-        persona.append({
-            "nombre": nombre,
-            "edad": edad,
-            "ciudad": ciudad
-        })
-
-en_bogota = [p for p in persona if p["ciudad"] == "Bogota"]     
-        
-if en_bogota:
-    print(f"Personas en Bogotá: {en_bogota}")
-
-else:    
-    print("No se encontraron personas en Bogotá.")     
+print(bogotanos)
