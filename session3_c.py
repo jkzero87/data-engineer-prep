@@ -20,5 +20,3 @@ def registrar(*args, **kwargs):
     print(texto)
 
 registrar(150.50, 200.00, 75.25, usuario="juan", ciudad="Bogota", fecha="2026-05-04")
-
-print (formatear_resumen)
