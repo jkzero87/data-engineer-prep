@@ -1,0 +1,13 @@
+=== REPORTE DE ANALISIS DE LOGS ===
+
+ALERTAS:
+[ALERTA] 2026-05-05 08:16:01 | status 401 | /api/login | 89ms
+[ALERTA] 2026-05-05 08:16:45 | status 500 | /api/orders | 2340ms
+[ALERTA] 2026-05-05 08:17:55 | status 503 | /api/orders | 5102ms
+[ALERTA] 2026-05-05 08:18:23 | status 404 | /api/users | 23ms
+[ALERTA] 2026-05-05 08:19:30 | status 500 | /api/login | 1890ms
+
+ESTADISTICAS:
+Total de errores: 5
+Duracion promedio: 1888.80
+Endpoint mas lento: /api/orders
