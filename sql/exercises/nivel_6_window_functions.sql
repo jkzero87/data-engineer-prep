@@ -37,3 +37,17 @@ SELECT
 	ROW_NUMBER() OVER (PARTITION BY genero ORDER BY reproducciones DESC) AS posicion
 FROM canciones;
 
+WITH ranked AS (
+    SELECT
+        titulo,
+        genero,
+        reproducciones,
+        ROW_NUMBER() OVER (PARTITION BY genero ORDER BY reproducciones DESC) AS rn
+    FROM canciones
+)
+SELECT titulo, genero, reproducciones
+FROM ranked
+WHERE rn <= 3;
+
+
+
