@@ -4,7 +4,7 @@
 SET search_path TO practica;
 
 -- Quick sanity check
-SELECT * FROM canciones LIMIT 3;
+SELECT * FROM canciones ;
 
 SELECT
     DATE_TRUNC('month', fecha_lanzamiento) AS mes,
@@ -83,3 +83,51 @@ and total plays per weekday. Order by dia_semana.
    don't fight it (though you may wrap it in COALESCE(..., 0) if you want it tidy).
 Start with 7.1, write it, run it, paste the result. We'll go one at a time
  — I'd rather catch a misunderstanding on 7.1 than have it compound through all five.
+
+
+
+SELECT 
+    titulo,
+    fecha_lanzamiento,
+    CURRENT_DATE - fecha_lanzamiento AS dias_desde_lanzamiento
+FROM canciones
+ORDER BY dias_desde_lanzamiento DESC;
+
+SELECT
+    DATE_TRUNC('month', fecha_lanzamiento)::DATE AS mes,
+    COUNT(*) AS total_canciones,
+    SUM(reproducciones) AS reproducciones_totales
+FROM canciones
+GROUP BY mes
+ORDER BY mes ASC;
+
+
+SELECT
+    EXTRACT(DOW FROM fecha_lanzamiento) AS dia_semana,
+    COUNT(*) AS total_canciones,
+    SUM(reproducciones) AS reproducciones_totales
+FROM canciones
+GROUP BY dia_semana
+ORDER BY dia_semana;
+
+SELECT
+    titulo,
+    fecha_lanzamiento
+FROM canciones
+WHERE fecha_lanzamiento >= CURRENT_DATE - INTERVAL '18 months'
+ORDER BY fecha_lanzamiento DESC;
+
+WITH reproducciones_por_mes AS (
+    SELECT
+        DATE_TRUNC('month', fecha_lanzamiento) AS mes,
+        SUM(reproducciones) AS reproducciones_mes
+    FROM canciones
+    GROUP BY DATE_TRUNC('month', fecha_lanzamiento)
+)
+SELECT
+    mes,
+    reproducciones_mes,
+    COALESCE(LAG(reproducciones_mes) OVER (ORDER BY mes), 0) AS reproducciones_mes_anterior,
+    reproducciones_mes - COALESCE(LAG(reproducciones_mes) OVER (ORDER BY mes), 0) AS diferencia
+FROM reproducciones_por_mes
+ORDER BY mes;
