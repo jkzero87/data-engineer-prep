@@ -54,3 +54,26 @@ DROP INDEX idx_eventos_tipo;
 -- 8.2 conclusion: tested CREATE INDEX on tipo column.
 -- Bitmap Index Scan: 377ms. Seq Scan: 390ms. Difference negligible.
 -- At ~20% selectivity, index doesn't earn its write cost. Dropped.
+
+SELECT * FROM eventos
+WHERE tipo = 'compra'
+  AND fecha >= NOW() - INTERVAL '7 days'
+  AND usuario_id < 1000;
+
+  -- 8.2 conclusion: tested CREATE INDEX on tipo. At ~20% selectivity
+-- the index got used (Bitmap Heap Scan) but the difference vs Seq Scan
+-- was ~13ms on a 390ms query (3%). Not worth the write cost. Dropped.
+DROP INDEX IF EXISTS idx_eventos_tipo;
+
+-- Verify what indexes remain:
+SELECT indexname FROM pg_indexes
+WHERE schemaname = 'practica' AND tablename = 'eventos';
+
+-- ============================================================
+-- Level 8 conclusion
+-- ============================================================
+-- Concepts covered: EXPLAIN ANALYZE, Seq Scan vs Bitmap Heap Scan,
+-- index cost vs benefit, selectivity rule, read/write ratio framing.
+-- Real practice deferred to Project 1, where indexing decisions
+-- will be made against real data and real workloads.
+-- ============================================================
