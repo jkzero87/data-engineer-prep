@@ -17,3 +17,18 @@ Thumbs.db
 
 # Scratch SQL — queries de prueba, no versionar
 sql/scratch/
+
+# Python virtual environments
+analyst-env/
+.venv/
+__pycache__/
+*.pyc
+
+# Data files - never commit datasets to the repo
+*.csv
+*.zip
+data/
+datasets/
+
+# Environment secrets
+.env
