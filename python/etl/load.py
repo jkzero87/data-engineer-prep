@@ -1,16 +1,44 @@
 import os
+import json
+import logging
+
 import psycopg2
 from dotenv import load_dotenv
 from pathlib import Path
-import json
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "coins.json"
+BASE_DIR = Path(__file__).resolve().parent            # .../python/etl
+DATA_PATH = BASE_DIR.parent / "data" / "coins.json"   # same result as your line 7
+LOG_DIR = BASE_DIR.parent / "logs"                    # .../python/logs
+LOG_DIR.mkdir(exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_DIR / "pipeline.log"),
+        logging.StreamHandler(),
+    ],
+)
+
+logger = logging.getLogger("load")
 
 with open(DATA_PATH) as f:
     coins = json.load(f)
 
-load_dotenv()  # reads .env into the environment
-print("HOST:", os.getenv("DB_HOST"))   # debug
+load_dotenv(BASE_DIR.parents[1] / ".env")
+
+UPSERT_SQL = """
+    INSERT INTO coins (id, name, current_price, price_updated_at)
+    VALUES (%s, %s, %s,
+            CASE WHEN %s::numeric IS NOT NULL THEN NOW() ELSE NULL END)
+    ON CONFLICT (id) DO UPDATE SET
+        name = COALESCE(EXCLUDED.name, coins.name),
+        current_price = COALESCE(EXCLUDED.current_price, coins.current_price),
+        price_updated_at = CASE
+            WHEN EXCLUDED.current_price IS NOT NULL THEN NOW()
+            ELSE coins.price_updated_at
+        END;
+"""
 
 conn = psycopg2.connect(
     host=os.getenv("DB_HOST"),
@@ -23,20 +51,26 @@ conn = psycopg2.connect(
 
 cur = conn.cursor()
 
+loaded = skipped = stale = 0
+
 for coin in coins:
-    cur.execute(
-        """
-        INSERT INTO coins (id, name, current_price)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (id) DO UPDATE
-            SET name = EXCLUDED.name,
-                current_price = EXCLUDED.current_price;
-        """,
-        (coin["id"], coin["name"], coin["current_price"])
-    )
+    coin_id = coin.get("id")
+    if coin_id is None:
+        logger.warning("Skipping record with missing id: %s", coin)
+        skipped += 1
+        continue
+
+    name = coin.get("name")
+    price = coin.get("current_price")
+    if price is None:
+        stale += 1
+        logger.warning("No price for %s - keeping existing value", coin_id)
+
+    cur.execute(UPSERT_SQL, (coin_id, name, price, price))
+    loaded += 1
 
 conn.commit()
 cur.close()
 conn.close()
 
-print(f"Loaded {len(coins)} coins")
+logger.info("Run complete: loaded=%d skipped=%d stale=%d", loaded, skipped, stale)

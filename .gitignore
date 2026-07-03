@@ -32,3 +32,5 @@ datasets/
 
 # Environment secrets
 .env
+python/logs/
+python/data/
