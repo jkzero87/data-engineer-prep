@@ -34,3 +34,4 @@ datasets/
 .env
 python/logs/
 python/data/
+python/jira-analysis/outputs/
