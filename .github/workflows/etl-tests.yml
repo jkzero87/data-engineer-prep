@@ -1,0 +1,30 @@
+name: ETL tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "python/etl/**"
+      - ".github/workflows/etl-tests.yml"
+  pull_request:
+    paths:
+      - "python/etl/**"
+      - ".github/workflows/etl-tests.yml"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          pip install -r python/etl/requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest python/etl/test_load.py -v
