@@ -19,32 +19,17 @@ Pipeline position:
 
 import os
 import json
-import logging
+from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
-from pathlib import Path
+
+from logging_setup import get_logger
 
 BASE_DIR = Path(__file__).resolve().parent            # .../python/etl
 DATA_PATH = BASE_DIR.parent / "data" / "coins.json"   # same result as your line 7
-LOG_DIR = BASE_DIR.parent / "logs"                    # .../python/logs
-LOG_DIR.mkdir(exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_DIR / "pipeline.log"),
-        logging.StreamHandler(),
-    ],
-)
-
-logger = logging.getLogger("load")
-
-with open(DATA_PATH) as f:
-    coins = json.load(f)
-
-load_dotenv(BASE_DIR.parents[1] / ".env")
+logger = get_logger("load")
 
 UPSERT_SQL = """
     INSERT INTO coins (id, name, current_price, price_updated_at)
@@ -66,41 +51,81 @@ UPSERT_SQL = """
         END;
 """
 
-conn = psycopg2.connect(
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT"),
-    dbname=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-)
 
+def upsert_params(coin: dict):
+    """Extract (id, name, price) from a coin record, or None if it has no id.
 
-cur = conn.cursor()
-
-loaded = skipped = stale = 0
-
-for coin in coins:
+    A record with no id has no stable key, so it cannot be upserted against
+    an existing row -- callers should skip it rather than insert a NULL
+    primary key.
+    """
     coin_id = coin.get("id")
-    # A record with no id has no stable key, so it cannot be upserted against
-    # an existing row. Skip it rather than attempt a NULL primary-key insert.
     if coin_id is None:
-        logger.warning("Skipping record with missing id: %s", coin)
-        skipped += 1
-        continue
+        return None
+    return coin_id, coin.get("name"), coin.get("current_price")
 
-    name = coin.get("name")
-    price = coin.get("current_price")
-    if price is None:
-        stale += 1
-        logger.warning("No price for %s - keeping existing value", coin_id)
 
-    # 4 placeholders in UPSERT_SQL, filled positionally: id, name, price, and
-    # price again for the CASE WHEN %s::numeric IS NOT NULL timestamp clause.
-    cur.execute(UPSERT_SQL, (coin_id, name, price, price))
-    loaded += 1
+def load_coins(path: Path) -> list:
+    with open(path) as f:
+        return json.load(f)
 
-conn.commit()
-cur.close()
-conn.close()
 
-logger.info("Run complete: loaded=%d skipped=%d stale=%d", loaded, skipped, stale)
+def connect():
+    return psycopg2.connect(
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+    )
+
+
+def run(coins: list, conn) -> dict:
+    loaded = skipped = stale = 0
+    cur = conn.cursor()
+    try:
+        for coin in coins:
+            params = upsert_params(coin)
+            if params is None:
+                logger.warning("Skipping record with missing id: %s", coin)
+                skipped += 1
+                continue
+
+            coin_id, name, price = params
+            if price is None:
+                stale += 1
+                logger.warning("No price for %s - keeping existing value", coin_id)
+
+            # 4 placeholders in UPSERT_SQL, filled positionally: id, name, price, and
+            # price again for the CASE WHEN %s::numeric IS NOT NULL timestamp clause.
+            cur.execute(UPSERT_SQL, (coin_id, name, price, price))
+            loaded += 1
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+    return {"loaded": loaded, "skipped": skipped, "stale": stale}
+
+
+def main() -> None:
+    load_dotenv(BASE_DIR.parents[1] / ".env")
+    coins = load_coins(DATA_PATH)
+
+    conn = connect()
+    try:
+        counts = run(coins, conn)
+    finally:
+        conn.close()
+
+    logger.info(
+        "Run complete: loaded=%d skipped=%d stale=%d",
+        counts["loaded"], counts["skipped"], counts["stale"],
+    )
+
+
+if __name__ == "__main__":
+    main()

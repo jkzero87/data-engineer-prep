@@ -73,10 +73,14 @@ ASCII equivalent for terminals that do not render Mermaid:
    with run-level counters `loaded`, `skipped`, and `stale` emitted in a
    single summary `INFO` line at the end of every run.
 
-5. **Planned gap: API retries.** The extract step calls the API once and
-   raises on HTTP errors via `raise_for_status()`. Adding retry with
-   exponential backoff (e.g. `urllib3.Retry` or `tenacity`) is the next
-   intended improvement; see *Roadmap* below.
+5. **Retries with backoff.** `extract.py` issues its request through a
+   `requests.Session` mounted with a `urllib3.Retry` adapter: up to 3 retries
+   with exponential backoff on connection errors and on 429/5xx responses. A
+   momentary CoinGecko hiccup no longer fails the whole run.
+
+6. **Transactional load.** `load.py` wraps the upsert loop in `try/except` and
+   calls `conn.rollback()` on any failure, so a mid-run error can't leave a
+   half-applied, uncommitted transaction open against the database.
 
 ## Stack
 
@@ -89,9 +93,12 @@ ASCII equivalent for terminals that do not render Mermaid:
 ```
 python/
 ├── etl/
-│   ├── extract.py      # CoinGecko API  ->  staged JSON
-│   ├── load.py         # staged JSON    ->  Postgres upsert
-│   └── schema.sql      # CREATE TABLE for the coins table
+│   ├── extract.py         # CoinGecko API  ->  staged JSON
+│   ├── load.py            # staged JSON    ->  Postgres upsert
+│   ├── logging_setup.py   # shared logging config for both scripts
+│   ├── schema.sql         # CREATE TABLE for the coins table
+│   ├── requirements.txt   # requests, psycopg2-binary, python-dotenv
+│   └── test_load.py       # unit tests for the record-classification logic
 ├── data/
 │   └── coins.json      # staged handoff between extract and load
 └── logs/
@@ -143,7 +150,17 @@ For the Docker setup above the typical values are `localhost`, `5432`,
 ```bash
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install requests psycopg2-binary python-dotenv
+pip install -r python/etl/requirements.txt
+```
+
+### 5. (Optional) Override the coins pulled
+
+`extract.py` defaults to the top 5 coins in USD. Override via env vars if
+needed:
+
+```dotenv
+COINGECKO_PER_PAGE=10
+COINGECKO_VS_CURRENCY=eur
 ```
 
 ## How to run
@@ -192,10 +209,19 @@ A healthy run ends with a line such as:
 ... | INFO | load | Run complete: loaded=5 skipped=0 stale=0
 ```
 
+## Tests
+
+`test_load.py` covers the record-classification logic (`upsert_params`) that
+decides whether a record is skipped, loaded, or flagged stale -- no database
+required:
+
+```bash
+cd python/etl
+pytest test_load.py -v
+```
+
 ## Roadmap
 
-- **Retry with exponential backoff** on the CoinGecko API call in `extract.py`
-  (currently a single request that raises on a non-2xx response). This is the
-  primary known gap.
-- Optional: parameterize the number of coins pulled (`per_page`) and the
-  target currency (`vs_currency`), currently hardcoded in `extract.py`.
+- Add integration tests that exercise `load.run()` against a real (or
+  containerized/test) Postgres instance, covering the COALESCE and staleness
+  behavior end to end.
