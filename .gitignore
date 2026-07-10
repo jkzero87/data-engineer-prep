@@ -35,3 +35,4 @@ datasets/
 python/logs/
 python/data/
 python/jira-analysis/outputs/
+*.mp4
