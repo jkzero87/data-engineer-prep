@@ -1,3 +1,11 @@
+-- ============================================================
+-- Star schema for CoinGecko prices
+-- Grain of fact_prices: one row per coin per price timestamp
+-- Load order (MANDATORY): 1) dim_coins  2) dim_dates  3) fact_prices
+--   Facts reference dimension keys — loading facts first yields 0 rows silently.
+-- Source: flat table `coins` (id, name, current_price, price_updated_at)
+-- ============================================================
+
 -- Dimension: one row per coin (current version — SCD2 comes next session)
 CREATE TABLE dim_coins (
     coin_key   SERIAL PRIMARY KEY,      -- surrogate key
@@ -70,3 +78,5 @@ SELECT COUNT(*) FROM fact_prices;  -- step 2 worked?
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'coins';
+
+
