@@ -1,39 +1,32 @@
 #!/usr/bin/env python3
 """
-agent_v2.py — Harness v3
+agent_v2.py — Harness v3.1
 Worker/Supervisor loop over local llama-server instances.
 
-  EXECUTOR   (Qwen3.5-4B,  port 8090): does the task, fast, thinking off
-  SUPERVISOR (Qwen3.6-35B, port 8091): validates, thinking on
+  EXECUTOR   (Qwen3.5-4B,  port 8090): the HANDS — executes, fast, thinking off
+  SUPERVISOR (Qwen3.6-35B, port 8091): the BRAIN — validates, searches, decides
 
-WHAT CHANGED IN v3 (and why — each maps to a failure we logged):
+v3 (research-backed anti-hallucination package):
+1. ROUTER (tier 0): the 4B classifies whether the task needs live facts
+   and writes the search query. Evidence is fetched ONCE, before attempt
+   1, and shared by worker AND judge — one grounded judge round instead
+   of think->search->think.
+2. NUMBERED EVIDENCE + CITATIONS: results carry [n] and URLs; the worker
+   must cite [n] after every factual claim; the judge checks citations.
+3. ABSTENTION: verdict INCONCLUSIVE stops the retry loop when the
+   evidence cannot settle the question (retrying only reshuffles guesses).
+4. SAMPLING PER ROLE: worker temp 0.2 (faithful/grounded), judge at
+   Qwen's recommended thinking-mode precision settings.
+5. requests.Session for connection reuse.
 
-1. ROUTER (new tier 0). The 4B first classifies the task: does it need
-   verifiable real-world facts? If yes, it writes a search query and we
-   fetch evidence ONCE, BEFORE attempt 1. Both worker and judge see the
-   same evidence. This is the "synergy" fix: agent_v1 was better because
-   the answering model held the evidence — now it does again, and the
-   judge only has to verify, in ONE round instead of two (~40s saved
-   per attempt).
-
-2. NUMBERED EVIDENCE + CITATIONS. Search results carry [n] and URLs;
-   the worker must cite [n] after each factual claim. Forcing citation
-   against numbered sources is the standard RAG anti-hallucination
-   technique — a claim with no [n] to point at is a claim the model
-   invented.
-
-3. ABSTENTION. Both worker and judge may now say the evidence does not
-   answer the question. New verdict INCONCLUSIVE stops the retry loop:
-   when the evidence can't settle it, another retry only reshuffles
-   guesses (that's what "Los Fabuleros de la Negra" was).
-
-4. SAMPLING PARAMS PER ROLE. We were running on server defaults.
-   Worker: temperature 0.2 — low temp is the community standard for
-   grounded/RAG generation (fewer invented details). Judge: 0.6 /
-   top_p 0.95 / top_k 20 — Qwen's recommended thinking-mode settings
-   for precision tasks.
-
-5. requests.Session for connection reuse (minor speed, good practice).
+v3.1 additions:
+6. on_draft CALLBACK: the engine announces each draft the moment it
+   exists; the REPL shows it while the judge deliberates (perceived
+   latency ~4s). The engine emits, the display decides — separation
+   of concerns.
+7. ESCALATION TIER: if the hands fail twice, the BRAIN does the task
+   itself, with the evidence and the failure history as context.
+   Failures become slow successes (L1 -> L2 support model).
 
 Kept from before: tier-1 mechanical check with supervisor override on
 last attempt, network resilience (backoff, 503), engine-level JSONL
@@ -248,7 +241,10 @@ def route_task(task: str) -> tuple[bool, str]:
 
 
 def run_task(task: str, max_retries: int = 1, on_draft=None) -> dict:
-    """Full worker->supervisor cycle with retry. Returns a result record."""
+    """Full worker->supervisor cycle with retry and escalation.
+    Returns a result record. If `on_draft` is given, it is called as
+    on_draft(attempt_number, output) the moment each draft exists, so
+    a display layer can show it while the judge deliberates."""
     record = {"task": task, "attempts": []}
 
     # Tier 0: decide once whether this task needs live evidence.
@@ -277,6 +273,7 @@ def run_task(task: str, max_retries: int = 1, on_draft=None) -> dict:
         t_exec = time.time() - t0
         if on_draft:
             on_draft(attempt + 1, output)
+
         # Tier 1: mechanical validation — free, instant, structural only.
         mech_ok, mech_reason = mechanical_check(task, output)
         if not mech_ok and attempt < max_retries:
@@ -380,8 +377,24 @@ def run_task(task: str, max_retries: int = 1, on_draft=None) -> dict:
                 "cite its number like [2]):\n" + evidence
             )
 
-    record["status"] = "REJECTED_FINAL"
-    record["final_output"] = record["attempts"][-1]["output"]
+    # Escalation: the hands failed twice — the brain does it itself,
+    # with the evidence and the failure history as context.
+    print("  [escalate] worker failed twice — supervisor takes the task")
+    esc_prompt = f"{task}\n\n"
+    if evidence:
+        esc_prompt += ("LIVE SEARCH RESULTS (numbered; every factual claim "
+                       f"must cite [n]):\n{evidence}\n\n")
+    esc_prompt += (
+        "A smaller assistant failed this task. Its last attempt:\n"
+        f"{record['attempts'][-1]['output']}\n"
+        f"Errors found:\n{record['attempts'][-1]['errors']}\n\n"
+        "Do the task yourself, correctly. Output ONLY the final answer."
+    )
+    t0 = time.time()
+    record["final_output"] = chat(SUPERVISOR_URL, esc_prompt,
+                                  max_tokens=6000, params=JUDGE_PARAMS)
+    record["escalation_s"] = round(time.time() - t0, 2)
+    record["status"] = "ESCALATED"
     log_record(record)
     return record
 
@@ -411,6 +424,8 @@ def main() -> None:
             print(f"SUPERVISOR RAW:\n{a['verdict_raw']}")
 
     print(f"\n{'=' * 60}\nSTATUS: {result['status']}")
+    if "escalation_s" in result:
+        print(f"(escalated to supervisor in {result['escalation_s']}s)")
     print(f"FINAL OUTPUT:\n{result['final_output']}")
 
 

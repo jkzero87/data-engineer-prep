@@ -4,6 +4,12 @@ harness_chat.py — Interactive REPL for the harness (Claude Code style).
 
 Type a question, the worker/supervisor pipeline answers, repeat.
 Commands:  /exit  quit   |   /last  show full detail of the last run
+
+Display contract with the engine:
+- run_task calls on_draft(attempt, output) the moment a draft exists,
+  so you read the draft (~4s) while the judge deliberates.
+- End-of-run only reprints the text if the final differs from the last
+  draft you already read; otherwise it just stamps the verdict.
 """
 
 from agent_v2 import run_task
@@ -46,11 +52,14 @@ def main() -> None:
                 print(f"{DIM}no runs yet.{RESET}")
                 continue
             for a in last["attempts"]:
-                ok = f"{GREEN}ACCEPT{RESET}" if a["accepted"] else f"{RED}REJECT{RESET}"
+                verdict = a.get("verdict", "ACCEPT" if a["accepted"] else "REJECT")
+                ok = f"{GREEN}{verdict}{RESET}" if a["accepted"] else f"{RED}{verdict}{RESET}"
                 print(f"{DIM}attempt {a['attempt']} · exec {a['t_executor_s']}s"
                       f" · judge {a['t_supervisor_s']}s ·{RESET} {ok}")
                 if a.get("errors"):
                     print(f"{YELLOW}{a['errors']}{RESET}")
+            if "escalation_s" in last:
+                print(f"{DIM}escalation · supervisor {last['escalation_s']}s{RESET}")
             continue
 
         print(f"{DIM}thinking...{RESET}")
@@ -62,8 +71,9 @@ def main() -> None:
 
         last = run_task(task, on_draft=show_draft)
 
-        color = GREEN if last["status"] == "ACCEPTED" else YELLOW
-        tag = {"ACCEPTED": "✓", "INCONCLUSIVE": "⚠ inconclusive"}.get(
+        color = GREEN if last["status"] in ("ACCEPTED", "ESCALATED") else YELLOW
+        tag = {"ACCEPTED": "✓", "ESCALATED": "✓ 35B took over",
+               "INCONCLUSIVE": "⚠ inconclusive"}.get(
             last["status"], "⚠ unverified")
         if drafts and last["final_output"] == drafts[-1]:
             print(f"\n{color}{tag}{RESET} {DIM}(the draft above is the final answer){RESET}")
