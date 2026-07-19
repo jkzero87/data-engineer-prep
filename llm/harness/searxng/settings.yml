@@ -1,0 +1,40 @@
+use_default_settings: true
+
+server:
+  secret_key: "change-this-to-random-secret-key"
+  limiter: false
+  image_proxy: true
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+
+engines:
+  - name: duckduckgo
+    disabled: false
+
+  - name: google
+    disabled: false
+
+  - name: bing
+    disabled: false
+
+  - name: wikipedia
+    disabled: false
+
+  - name: brave
+    disabled: false
+
+  - name: github
+    disabled: false
+
+  - name: stackoverflow
+    disabled: false
+
+  - name: askubuntu
+    disabled: false
+
+  - name: arxiv
+    disabled: false
