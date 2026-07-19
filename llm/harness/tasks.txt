@@ -1,0 +1,9 @@
+# tasks.txt — one task per line. Lines starting with # are comments.
+# Mix: easy extractions, a transform, and one trap likely to trigger retry.
+
+Extract every date from this text as a JSON array in YYYY-MM-DD format, output ONLY JSON: The invoice from June 3, 2025 was paid on 07/08/2025 and archived on 2025-09-01.
+Output ONLY a JSON array of the first 8 prime numbers.
+Convert this to a JSON object with keys name, age, city — output ONLY JSON: Maria Lopez, 34 years old, lives in Medellin.
+Output ONLY a JSON array of strings with the days of the week in Spanish, starting Monday, all lowercase.
+Extract all email addresses as a JSON array, output ONLY JSON: Contact juan@example.com or support@empresa.co, NOT the old address admin@old-site.net which is deprecated.
+List the ISO 4217 currency codes for Colombia, Japan, and the United Kingdom as a JSON array, output ONLY JSON.

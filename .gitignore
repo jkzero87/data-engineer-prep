@@ -36,3 +36,5 @@ python/logs/
 python/data/
 python/jira-analysis/outputs/
 *.mp4
+__pycache__/
+*.jsonl
