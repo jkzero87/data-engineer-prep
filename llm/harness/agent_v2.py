@@ -247,7 +247,7 @@ def route_task(task: str) -> tuple[bool, str]:
     return needs, query
 
 
-def run_task(task: str, max_retries: int = 1) -> dict:
+def run_task(task: str, max_retries: int = 1, on_draft=None) -> dict:
     """Full worker->supervisor cycle with retry. Returns a result record."""
     record = {"task": task, "attempts": []}
 
@@ -275,7 +275,8 @@ def run_task(task: str, max_retries: int = 1) -> dict:
         t0 = time.time()
         output = chat(EXECUTOR_URL, prompt, params=WORKER_PARAMS)
         t_exec = time.time() - t0
-
+        if on_draft:
+            on_draft(attempt + 1, output)
         # Tier 1: mechanical validation — free, instant, structural only.
         mech_ok, mech_reason = mechanical_check(task, output)
         if not mech_ok and attempt < max_retries:

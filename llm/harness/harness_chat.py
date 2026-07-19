@@ -54,11 +54,21 @@ def main() -> None:
             continue
 
         print(f"{DIM}thinking...{RESET}")
-        last = run_task(task)
+        drafts = []
+
+        def show_draft(attempt: int, output: str) -> None:
+            drafts.append(output)
+            print(f"\n{DIM}draft {attempt} — verifying with judge...{RESET}\n{output}")
+
+        last = run_task(task, on_draft=show_draft)
 
         color = GREEN if last["status"] == "ACCEPTED" else YELLOW
-        tag = "✓" if last["status"] == "ACCEPTED" else "⚠ unverified"
-        print(f"\n{color}{tag}{RESET} {last['final_output']}")
+        tag = {"ACCEPTED": "✓", "INCONCLUSIVE": "⚠ inconclusive"}.get(
+            last["status"], "⚠ unverified")
+        if drafts and last["final_output"] == drafts[-1]:
+            print(f"\n{color}{tag}{RESET} {DIM}(the draft above is the final answer){RESET}")
+        else:
+            print(f"\n{color}{tag}{RESET} {last['final_output']}")
 
 
 if __name__ == "__main__":
