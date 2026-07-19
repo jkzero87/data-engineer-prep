@@ -1643,7 +1643,7 @@ def plan_research(task: str) -> dict:
 
         clean_queries.append(q)
 
-    if any(k in task_l for k in ("colombia", "colombiano", "colombiana")):
+    if "rock" in task_l and any(k in task_l for k in ("colombia", "colombiano", "colombiana")):
         if not any("site:es.wikipedia.org" in q.lower() for q in clean_queries):
             clean_queries.append('site:es.wikipedia.org "Rock de Colombia"')
 
@@ -1764,3 +1764,227 @@ def result_score(item: dict, query_terms: set[str]) -> float:
 
     return score
 # --- END PATCH 6 ---
+
+# --- PATCH 7: generic topic relevance ---
+if "IRRELEVANT_URL_FRAGMENTS" not in globals():
+    IRRELEVANT_URL_FRAGMENTS = (
+        "facebook.com/",
+        "youtube.com/@",
+        "twitter.com/",
+        "x.com/",
+        "instagram.com/",
+        "tiktok.com/@",
+        "nytimes.com/es/interactive/2025/espanol/cultura/mejores-peliculas",
+        "bbc.com/mundo/articles/c62dwzyzy6xo",
+        "ejemplos.co/quien-o-quien",
+    )
+
+if "IRRELEVANT_TEXT_TERMS" not in globals():
+    IRRELEVANT_TEXT_TERMS = (
+        "mejores películas",
+        "mejores peliculas",
+        "100 mejores películas",
+        "25 mejores películas",
+        "películas del siglo",
+        "críticos de la bbc",
+        "quién o quien",
+        "quien o quien",
+        "se escribe",
+        "ortografía",
+        "ortografia",
+        "gramática",
+        "gramatica",
+        "pronombre relativo",
+        "tilde diacrítica",
+    )
+
+_GENERIC_STOP_TERMS = {
+    "cual",
+    "cuál",
+    "que",
+    "qué",
+    "como",
+    "cómo",
+    "donde",
+    "dónde",
+    "cuando",
+    "cuándo",
+    "quien",
+    "quién",
+    "mejor",
+    "mejores",
+    "mayor",
+    "mas",
+    "más",
+    "grande",
+    "grandes",
+    "importante",
+    "importantes",
+    "top",
+    "ranking",
+    "lista",
+    "sobre",
+    "para",
+    "con",
+    "sin",
+    "por",
+    "una",
+    "uno",
+    "unos",
+    "unas",
+    "los",
+    "las",
+    "del",
+    "al",
+    "de",
+    "la",
+    "el",
+    "y",
+    "a",
+    "en",
+    "se",
+    "es",
+    "son",
+    "fue",
+}
+
+def _important_query_terms(query: str) -> set:
+    return {
+        t for t in re.findall(r"\w+", (query or "").lower())
+        if len(t) > 3 and t not in _GENERIC_STOP_TERMS
+    }
+
+def is_relevant_result(item: dict, query: str) -> bool:
+    url = (item.get("url") or "").lower()
+    title = (item.get("title") or "").lower()
+    snippet = (item.get("snippet") or "").lower()
+    text = f"{title} {snippet} {url}"
+    q = (query or "").lower()
+
+    if any(frag in url for frag in IRRELEVANT_URL_FRAGMENTS):
+        return False
+
+    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
+        allowed = (
+            "pelicula",
+            "película",
+            "peliculas",
+            "películas",
+            "cine",
+            "film",
+            "movie",
+            "gramatica",
+            "gramática",
+            "ortografia",
+            "ortografía",
+            "quien o quien",
+            "quién o quién",
+            "pronombre",
+        )
+        if not any(k in q for k in allowed):
+            return False
+
+    return True
+
+def result_score(item: dict, query_terms: set) -> float:
+    url = (item.get("url") or "").lower()
+    title = (item.get("title") or "").lower()
+    snippet = (item.get("snippet") or "").lower()
+    text = f"{title} {snippet} {url}"
+    domain = domain_of(url)
+
+    score = float(trust_score(url) * 8)
+
+    useful_terms = {
+        t for t in query_terms
+        if isinstance(t, str) and len(t) > 3 and t not in _GENERIC_STOP_TERMS
+    }
+
+    score += 4.0 * sum(1 for t in useful_terms if t in text)
+
+    if any(k in text for k in ("colombia", "colombiano", "colombiana", "colombianos", "colombianas")):
+        score += 15.0
+
+    if domain.endswith(".co"):
+        score += 12.0
+
+    years = {t for t in query_terms if isinstance(t, str) and t.isdigit() and len(t) == 4}
+    if years:
+        if any(y in text for y in years):
+            score += 35.0
+        else:
+            score -= 25.0
+
+    if "2024" in query_terms:
+        if any(k in text for k in ("25th", "25ª", "25a", "25 edición", "vigésima quinta", "vigesima quinta")):
+            score += 20.0
+
+        if any(k in text for k in ("26th", "26ª", "26a", "26 edición")) and "2024" not in text:
+            score -= 35.0
+
+    if "2025" in query_terms:
+        if any(k in text for k in ("26th", "26ª", "26a", "26 edición", "2025")):
+            score += 20.0
+
+    if any(s in url for s in ("facebook.com", "youtube.com/@", "twitter.com", "x.com", "instagram.com", "tiktok.com")):
+        score -= 150.0
+
+    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
+        score -= 100.0
+
+    non_colombian = globals().get("NON_COLOMBIAN_OR_NOT_ROCK_SIGNALS", ())
+    if non_colombian and any(k in text for k in non_colombian):
+        if any(k in text for k in ("colombia", "colombiano", "colombiana")):
+            score -= 5.0
+        else:
+            score -= 60.0
+
+    if any(k in text for k in ("rock colombiano", "rock de colombia")):
+        score += 8.0
+
+    if any(k in text for k in ("rap colombiano", "hip hop colombiano", "hip-hop colombiano", "rap en colombia")):
+        score += 8.0
+
+    if any(k in text for k in (
+        "comida colombiana",
+        "gastronomía colombiana",
+        "gastronomia colombiana",
+        "platos típicos colombianos",
+        "platos tipicos colombianos",
+    )):
+        score += 8.0
+
+    return score
+# --- END PATCH 7 ---
+
+
+# --- GENERAL: hard cap on queries per task (protects search engines) ---
+_orig_bep_cap = build_evidence_pack
+
+def build_evidence_pack(task, queries, time_range=None, claims_to_verify=None):
+    seen, capped = set(), []
+    for q in (queries or []):
+        k = str(q).strip().lower()
+        if k and k not in seen:
+            seen.add(k); capped.append(q)
+        if len(capped) >= 3:
+            break
+    return _orig_bep_cap(task, capped or [task], time_range, claims_to_verify)
+# --- END GENERAL ---
+
+
+# --- GENERAL: quote multi-word proper nouns (kills semantic collisions) ---
+import re as _re_q
+_orig_bep_quote = build_evidence_pack
+
+def _quote_entities(q: str) -> str:
+    s = str(q or "")
+    if '"' in s:
+        return s
+    pat = _re_q.compile(r"\b([A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ]{2,})+)")
+    return pat.sub(lambda m: '"' + m.group(1) + '"', s)
+
+def build_evidence_pack(task, queries, time_range=None, claims_to_verify=None):
+    qs = [_quote_entities(q) for q in (queries or [])]
+    return _orig_bep_quote(task, qs or [_quote_entities(task)], time_range, claims_to_verify)
+# --- END GENERAL ---

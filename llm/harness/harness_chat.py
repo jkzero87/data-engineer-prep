@@ -2,12 +2,12 @@
 """
 harness_chat.py — Interactive REPL for the harness (Claude Code style).
 
-Type a question, the worker/supervisor pipeline answers, repeat.
+Type a question, el pipeline ejecutante/cerebro responde, repeat.
 Commands:  /exit  quit   |   /last  show full detail of the last run
 
 Display contract with the engine:
 - run_task calls on_draft(attempt, output) the moment a draft exists,
-  so you read the draft (~4s) while the judge deliberates.
+  so you read the draft (~4s) mientras el cerebro delibera.
 - End-of-run only reprints the text if the final differs from the last
   draft you already read; otherwise it just stamps the verdict.
 """
@@ -25,7 +25,7 @@ RESET = "\033[0m"
 
 BANNER = f"""{CYAN}
   ┌─────────────────────────────────────────────┐
-  │  HARNESS CHAT — 4B worker · 35B judge       │
+  │  HARNESS CHAT — 4B ejecutante · 35B cerebro       │
   │  /exit to quit · /last for run details      │
   └─────────────────────────────────────────────┘{RESET}"""
 
@@ -55,7 +55,7 @@ def main() -> None:
                 verdict = a.get("verdict", "ACCEPT" if a["accepted"] else "REJECT")
                 ok = f"{GREEN}{verdict}{RESET}" if a["accepted"] else f"{RED}{verdict}{RESET}"
                 print(f"{DIM}attempt {a['attempt']} · exec {a['t_executor_s']}s"
-                      f" · judge {a['t_supervisor_s']}s ·{RESET} {ok}")
+                      f" · cerebro {a['t_supervisor_s']}s ·{RESET} {ok}")
                 if a.get("errors"):
                     print(f"{YELLOW}{a['errors']}{RESET}")
             if "escalation_s" in last:
@@ -67,16 +67,16 @@ def main() -> None:
 
         def show_draft(attempt: int, output: str) -> None:
             drafts.append(output)
-            print(f"\n{DIM}draft {attempt} — verifying with judge...{RESET}\n{output}")
+            print(f"\n{DIM}draft {attempt} — consultando al cerebro...{RESET}\n{output}")
 
         last = run_task(task, on_draft=show_draft)
 
         color = GREEN if last["status"] in ("ACCEPTED", "ESCALATED") else YELLOW
-        tag = {"ACCEPTED": "✓", "ESCALATED": "✓ 35B took over",
-               "INCONCLUSIVE": "⚠ inconclusive"}.get(
+        tag = {"ACCEPTED": "✓", "ESCALATED": "✓ Cerebro completó",
+               "INCONCLUSIVE": "⚠ sin conclusión"}.get(
             last["status"], "⚠ unverified")
         if drafts and last["final_output"] == drafts[-1]:
-            print(f"\n{color}{tag}{RESET} {DIM}(the draft above is the final answer){RESET}")
+            print(f"\n{color}{tag}{RESET} {DIM}(el borrador mostrado es la respuesta final){RESET}")
         else:
             print(f"\n{color}{tag}{RESET} {last['final_output']}")
 
