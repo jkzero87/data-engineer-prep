@@ -22,8 +22,8 @@ conclusions, and you do not decide what to do next — that happens elsewhere.
 5. Do not fix things you find. Report them.
 
 ## Editing PROJECT_TRUTH.md
-Do not edit it. You may propose lines for it, each with the command and output that
-proves it. It is maintained deliberately and updated outside this tool.
+You may edit it ONLY by inserting text given to you verbatim. Never author, reword,
+or infer a claim in this file. Every entry must name the command that produced it.
 
 ## Working agreements
 - Do not rewrite from scratch. Patch and extend.

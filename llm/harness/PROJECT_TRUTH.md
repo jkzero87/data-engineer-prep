@@ -282,3 +282,58 @@ Do not treat any of these as fact. Each needs a measurement before it is promote
 - Measure, don't project. Three runs, take the median.
 - A config counts only if it completes inference, not if it merely loads.
 - Update this file in the same session as any change, with the command that proves it.
+
+---
+
+## 13. SESSION LOG — 2026-08-09, proof of life after 3 weeks cold
+
+Cold start with services UNCHANGED, to establish an honest baseline before any fix.
+Driver 595.84. Monitor on dGPU. Both models resident.
+
+**Stack came up.** `systemctl --user start harness-executor harness-supervisor`
++ `docker start searxng`, 90s wait. Both units active. Ports 8090, 8091, 8888
+listening. VRAM 15130 / 16311 MiB. No CUDA errors in journalctl — the 580 -> 595
+driver change did NOT break the CUDA 13.1 build.
+
+**journalctl, verbatim:**
+- executor: `n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'`
+- supervisor: `n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'`
+- supervisor warning: `tensor overrides to CPU are used with mmap enabled -
+  consider using --no-mmap` (note: --no-mmap was measured 5.7% SLOWER in July)
+- supervisor load time 28s, executor 6s
+
+**Generation probe** (`curl /v1/chat/completions`, "Write 150 words about
+databases.", max_tokens=300):
+
+| Endpoint | tok/s | draft_n | accepted | content_len | reasoning_len |
+|---|---|---|---|---|---|
+| executor 8090 | 104.1 | None | None | 0 | 1308 |
+| brain 8091 | 23.3 | 249 | 174 | 0 | 1475 |
+
+**FINDING 1 — MTP works with n_slots=4.** The brain returned draft_n 249 with 174
+accepted (~70%) while running 4 slots. The prior belief that MTP requires
+`--parallel 1` is FALSE and is retracted. `--parallel 1` may still be right for
+latency, but not for MTP.
+
+**FINDING 2 — executor has no MTP at all.** `draft_n: None`. Its unit never passes
+`--spec-type draft-mtp`. Confirmed by the unit file, not inferred.
+
+**FINDING 3 — empty content on BOTH models at max_tokens=300.** Whole budget spent
+in reasoning_content; content empty. NOT yet a confirmed production bug: production
+uses 900 (HARNESS_EXECUTOR_MAX_TOKENS_LIMIT). Retest at 900 pending.
+
+**MEASURED SPEEDS SUPERSEDE ALL PRIOR NUMBERS:**
+- executor: 104 t/s (notes claimed 150 — claim retracted, was never re-measured)
+- brain at --n-cpu-moe 27, both models resident: 23.3 t/s (notes claimed 74.5 at
+  --n-cpu-moe 17, a different and untested config)
+- Single run each, not a median of 3. Treat as indicative, not certified.
+
+**SearXNG alive.** Query "colombia" returned 39 results from bing, duckduckgo,
+google cse. Unresponsive: brave (too many requests), qwant (CAPTCHA), startpage
+(CAPTCHA). The July engine bans persist; three working engines remain.
+
+**Still unverified after this session:** whether the harness itself runs end to end;
+which plan_research executes; whether shadowed patches matter; harness_log.jsonl
+contents.
+
+---
