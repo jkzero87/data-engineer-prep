@@ -1085,8 +1085,8 @@ def _format_profile_for_prompt(plan):
         if plan.get(key):
             lines.append(f"- {key}: {plan[key]}")
 
-    if plan.get("required_entities"):
-        lines.append("- required_entities: " + ", ".join(plan["required_entities"]))
+    # if plan.get("required_entities"):
+    #     lines.append("- required_entities: " + ", ".join(plan["required_entities"]))
 
     if plan.get("source_preferences"):
         lines.append("- source_preferences: " + ", ".join(plan["source_preferences"]))
