@@ -1,2 +1,5 @@
 .webcache/
 *.bak
+*.pre_*
+*.bak_*
+__pycache__/
