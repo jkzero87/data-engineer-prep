@@ -1901,6 +1901,9 @@ _orig_run_task_ge = run_task
 
 def run_task(task, on_draft=None):
     r = _orig_run_task_ge(task, on_draft=on_draft) or {}
+    plan = (r.get("plan") or {})
+    if plan.get("needs_web") is False:
+        return r
     meta = r.get("evidence_meta") or {}
     ev = r.get("evidence") or {}
     if not (ev.get("sources") or meta.get("sources")):
