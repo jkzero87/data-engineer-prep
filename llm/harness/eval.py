@@ -101,7 +101,7 @@ TASKS = [
         "kind": "web",
         "checks": {
             "status_in": ["ACCEPTED"],
-            "must_include_any": ["kernel.org", "kernel"],
+            "must_include_any": ["kernel", "núcleo", "Linux"],
         },
     },
     {

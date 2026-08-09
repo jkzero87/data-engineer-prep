@@ -387,3 +387,34 @@ are unrelated (fans, dock icons). Qwen 3.8 Max ran via web, left nothing on
 disk. The code is the only record of the P1-P10 patches.
 
 ---
+
+## 15. SESSION LOG — 2026-08-09 (later still): repeat_penalty rejected by the suite
+
+Attempted fix for the executor's intermittent repetition loop: repeat_penalty in
+the llm_json payload. Three configurations tested, each gated by eval.py:
+
+| Config | Suite | Failures |
+|---|---|---|
+| 1.1 global (all roles) | 7/10 | days (nested JSON array), rock_co ESCALATED, lg2024 INCONCLUSIVE |
+| 1.1 executor-only | 9/10 | days (nested array) — web tasks recovered, confirming the global penalty was damaging the judge/planner |
+| 1.05 executor-only | 8/10 | days (nested array) again + kernel (suite check bug, see below) |
+
+days produced [["lunes",...]] (nested array) in 3/3 runs with a penalty active
+vs clean exact-match without. VERDICT: any repeat_penalty distorts the
+executor's JSON structure. Fully reverted via git restore. GRAVEYARD ENTRY:
+do not re-propose repeat_penalty as a blanket setting. Smarter candidates if
+the loop justifies revisiting: penalty applied only on retry attempts, or a
+structural loop detector (repeated n-gram counter) in code.
+
+The intermittent loop remains OPEN: fires ~1 in 3 attempt-1 runs, retry rescues
+it. Judged the lesser evil vs always-corrupted JSON.
+
+kernel "failure" at 1.05 was a suite bug, not a harness bug: the answer came
+back in Spanish ("núcleo") and the check only matched English terms. Check
+widened to ["kernel","núcleo","Linux"].
+
+Note also: the judge ACCEPTED the malformed nested-array days output every
+time — the suite's mechanical json_equals caught what the 35B judge waved
+through. Mechanical checks outrank the judge on structure.
+
+---
