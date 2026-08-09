@@ -310,6 +310,9 @@ databases.", max_tokens=300):
 | executor 8090 | 104.1 | None | None | 0 | 1308 |
 | brain 8091 | 23.3 | 249 | 174 | 0 | 1475 |
 
+NOTE: brain 23.3 t/s was a cold-cache first run; warm runs same day measured
+57.4 t/s.
+
 **FINDING 1 — MTP works with n_slots=4.** The brain returned draft_n 249 with 174
 accepted (~70%) while running 4 slots. The prior belief that MTP requires
 `--parallel 1` is FALSE and is retracted. `--parallel 1` may still be right for
@@ -335,5 +338,52 @@ google cse. Unresponsive: brave (too many requests), qwant (CAPTCHA), startpage
 **Still unverified after this session:** whether the harness itself runs end to end;
 which plan_research executes; whether shadowed patches matter; harness_log.jsonl
 contents.
+
+---
+
+## 14. SESSION LOG — 2026-08-09 (later), two general fixes certified by eval suite
+
+**eval.py created** — 10 tasks / 4 domains, mechanical checks only (status, JSON
+equality, required/forbidden strings). Results append to eval_results.jsonl.
+Rule adopted: no fix commits unless the full suite holds or improves.
+
+**BASELINE: 5/10 (230.1s).** All 5 web tasks passed; all 5 mechanical tasks
+(primes, days, currency, emails, dates) failed INCONCLUSIVE in 1 attempt —
+the July empty-evidence guard forced INCONCLUSIVE on any task with 0 sources,
+including tasks that need none. The core mechanical workload had been broken
+since the guard was added; July's 6/6 batch predates the guard and was never
+re-run. The suite caught this on its first execution.
+
+**FIX 1 — required_entities injection removed** (agent_v2.py ~1088-1089
+commented; field kept in plan for logging; backup .pre_entities_fix).
+The planner hallucinates this field from parametric memory before evidence
+exists (measured: 5/6, 8/10, and 8/10 non-Colombian entities across runs,
+different every time) and the judge graded against it. Control question:
+ESCALATED/3 attempts/83.7s -> ACCEPTED/2 attempts/~52s, 3/3 runs.
+
+**FIX 2 — guard respects needs_web** (run_task wrapper at ~1902; if
+plan.needs_web is False, result returned unchanged; missing field = True,
+fail-closed; backup .pre_needsweb_fix).
+
+**AFTER BOTH: 10/10 (235.6s).** Mechanicals ACCEPTED in 1 attempt (~10-11s).
+Web tasks unchanged. photo (photosynthesis) went INCONCLUSIVE -> ACCEPTED in
+1 attempt 13.7s: planner marks it needs_web=false, 4B answers directly, judge
+still verifies. Open item C (atemporal routing) closed by this path.
+
+**Diagnosed, NOT yet fixed (next, one at a time, each gated by the suite):**
+- Executor repetition loop: attempt-1 degenerate loops observed at temp 0.1
+  AND 0.3 ("Los Redondos" repeated hundreds of times; judge confirmed). Fix
+  candidate: repeat_penalty ~1.1 in llm_json payload (research.py:960), which
+  currently sends only model/messages/temperature/max_tokens.
+- Executor memory-blending: attempt 1 names entities absent from evidence
+  (evidence pack verified clean: 0 mentions of the foreign bands across 8778
+  chars, 6 on-topic sources). Fix candidate: grounding rule in
+  EXECUTOR_SYSTEM_V2 — never name entities not present in evidence.
+- Temperatures are env vars (agent_v2.py:48-50): HARNESS_EXECUTOR_TEMP (0.1),
+  HARNESS_JUDGE_TEMP (0.0), HARNESS_BRAIN_TEMP (0.1).
+
+**Discovery closed:** no hidden material exists. July Claude Code transcripts
+are unrelated (fans, dock icons). Qwen 3.8 Max ran via web, left nothing on
+disk. The code is the only record of the P1-P10 patches.
 
 ---
