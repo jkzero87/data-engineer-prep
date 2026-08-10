@@ -82,6 +82,7 @@ TASKS = [
                                   "La Renga", "Enanitos Verdes", "Los Tetas es",
                                   "Duncan Dhu", "Alaska y Dinarama",
                                   "Café Tacvba", "Maná", "La Ley es"],
+            "min_sources": 1,
         },
     },
     {
@@ -93,6 +94,7 @@ TASKS = [
             "must_include_all": ["Aterciopelados"],
             "must_include_any": ["El Dorado"],
             "must_not_include": ["Novela", "Fito Páez ganó"],
+            "min_sources": 1,
         },
     },
     {
@@ -102,6 +104,7 @@ TASKS = [
         "checks": {
             "status_in": ["ACCEPTED"],
             "must_include_any": ["kernel", "núcleo", "Linux"],
+            "min_sources": 1,
         },
     },
     {
@@ -164,6 +167,12 @@ def evaluate(checks: dict, result: dict) -> list[str]:
         if present:
             failed.append(f"must_not_include: found {present}")
 
+    if "min_sources" in checks:
+        n = len((result.get("evidence") or {}).get("sources") or [])
+        need = checks["min_sources"]
+        if n < need:
+            failed.append(f"min_sources: got {n}, need {need}")
+
     return failed
 
 
@@ -174,6 +183,7 @@ def run_one(spec: dict) -> dict:
 
     failed_checks = evaluate(spec["checks"], result)
     passed = not failed_checks
+    n_sources = len((result.get("evidence") or {}).get("sources") or [])
 
     return {
         "id": spec["id"],
@@ -182,6 +192,7 @@ def run_one(spec: dict) -> dict:
         "status": result.get("status"),
         "attempts": len(result.get("attempts", [])),
         "elapsed_s": round(elapsed, 1),
+        "n_sources": n_sources,
         "failed_checks": failed_checks,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -211,6 +222,7 @@ def main() -> int:
             verdict = "PASS" if outcome["passed"] else "FAIL"
             print(f"[{outcome['id']}] {verdict} {outcome['status']} "
                   f"attempts={outcome['attempts']} {outcome['elapsed_s']}s "
+                  f"src={outcome['n_sources']} "
                   f"{outcome['failed_checks']}")
 
     total = time.time() - t_start
