@@ -418,3 +418,65 @@ time — the suite's mechanical json_equals caught what the 35B judge waved
 through. Mechanical checks outrank the judge on structure.
 
 ---
+
+## 16. SESSION LOG — 2026-08-09 (night): retrieval is the bottleneck
+
+**COMMITTED, gated by eval.py:**
+- Planner rule: needs_web=false ONLY when the task carries its own data
+  (extraction/transformation/formatting/arithmetic) or asks about a generic
+  concept with no proper noun. True whenever a specific product, company,
+  person, event, standard or version is named. Measured before/after over 5
+  plans each: "que es snowflake?" 3/5 -> 5/5 true; "latest stable Linux kernel"
+  5/5 true (held); "que es un dead letter queue?" 5/5 false (held — the rule is
+  not blunt). Closes the hole opened by the earlier needs_web guard fix, where a
+  definitional question about a named product could be answered from model memory
+  and marked ACCEPTED with zero sources.
+- eval.py: new min_sources check on rock_co, lg2024, kernel; every result line
+  now prints src=N.
+
+**ROOT CAUSE FOUND — is_relevant_result is a blocklist, not a relevance test.**
+The live definition (research.py ~1857) returns True unless the url or text
+matches IRRELEVANT_URL_FRAGMENTS / IRRELEVANT_TEXT_TERMS. It never requires the
+query's distinctive terms to appear. result_score uses those terms only to RANK,
+never to exclude. Three separate symptoms trace to this one gap:
+- "¿cuál es la mejor comida colombiana?" retrieved 6 PERUVIAN sources
+  (Gastronomía del Perú, recetascocinaperuana.com x2, isil.pe, comococinar.pe)
+  from correct Colombian queries. The executor abstained CORRECTLY; the brain
+  named the problem explicitly. This was NOT over-abstention.
+- "que es snowflake?" retrieved 5 RAE Spanish-dictionary pages (matched the
+  stopwords "que"/"es"), 0 mentions of Snowflake in 9972 chars.
+- Corporate snowflake.com pages passed with near-empty titles/snippets.
+
+**Attempted fix, REVERTED, UNTESTED (not rejected):** requiring >=1 term from
+_important_query_terms in title+snippet+url inside is_relevant_result. Two suite
+runs at 8/10 with different failures each, but the reverted baseline also came
+back 9/10, so the change could not be distinguished from engine noise.
+
+**MEASUREMENT IS BLOCKED BY ENGINE HEALTH.** SearXNG unresponsive_engines during
+this session: brave (suspended, too many requests), duckduckgo (CAPTCHA),
+google cse (suspended), mojeek (access denied), qwant (CAPTCHA), startpage
+(CAPTCHA). Effectively bing only. With one engine the result mix collapses and
+irrelevant pages dominate. Suite scores tonight: 10/10, 10/10, 9/10, 8/10, 8/10,
+9/10 — the variance is the engines, not the code.
+
+**NEXT WORK, in order:**
+1. Wikipedia-first retrieval. fetch_wikipedia_text already exists at
+   research.py:1315. Wikipedia never blocks, never CAPTCHAs, always fetches.
+   Guarantee it a slot in every evidence pack.
+2. Log SearXNG's unresponsive_engines per task. It is returned on every response
+   and currently discarded. The REPL should be able to say "search degraded"
+   instead of implying no information exists.
+3. Then retry the relevance requirement, measurable again.
+
+**Eliminated by measurement tonight (do not re-investigate):** planner health
+(produces good queries and smart negative_terms), search_web signature and
+behaviour, _quote_entities, fetch_url_text, make_source (never drops a source —
+falls back to snippet), the 3-query cap (works, chained via _orig_ wrappers).
+
+**Method notes:** jkhelper stops both models on REPL exit; three probes tonight
+silently measured a dead brain. Always verify the port answers before trusting
+output. Also: len(evidence_text)==149 was not an empty header — it was
+_empty_evidence's explanatory text, and printing it would have ended a
+multi-hour hunt in one minute.
+
+---
