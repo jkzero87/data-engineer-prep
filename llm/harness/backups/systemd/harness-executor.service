@@ -1,0 +1,11 @@
+[Unit]
+Description=Harness executor (Qwen3.5-4B)
+After=network.target
+
+[Service]
+ExecStart=/home/jkzero/llama.cpp/build/bin/llama-server -m /home/jkzero/models/Qwen3.5-4B-MTP-UD-Q4_K_XL.gguf -ngl 99 -fa on -np 4 --reasoning off --port 8090 --ctx-size 8192 --parallel 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
