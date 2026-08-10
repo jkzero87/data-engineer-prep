@@ -29,6 +29,7 @@ import json
 import os
 import re
 import time
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -73,6 +74,7 @@ RETRY = Retry(
     backoff_factor=0.4,
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["GET", "POST"],
+    respect_retry_after_header=False,
 )
 HTTP.mount("http://", HTTPAdapter(max_retries=RETRY, pool_connections=20, pool_maxsize=20))
 HTTP.mount("https://", HTTPAdapter(max_retries=RETRY, pool_connections=20, pool_maxsize=20))
@@ -604,9 +606,13 @@ def build_evidence_pack(
 
     if candidates:
         with ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
-            futures = [pool.submit(make_source, item) for item in candidates]
-            for fut in as_completed(futures):
-                sources.append(fut.result())
+            future_to_url = {pool.submit(make_source, item): item["url"] for item in candidates}
+            try:
+                for fut in as_completed(future_to_url, timeout=TIMEOUT * 4):
+                    sources.append(fut.result())
+            except concurrent.futures.TimeoutError:
+                unfinished = [url for fut, url in future_to_url.items() if not fut.done()]
+                print(f"[build_evidence_pack] timed out waiting on {len(unfinished)} source(s): {unfinished}")
 
     sources.sort(
         key=lambda s: (
