@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -402,6 +402,49 @@ def search_web(query: str, time_range: str | None = None) -> list[dict]:
     return search_ddg(query)
 
 
+def search_wikipedia(query: str, limit: int = 2) -> list[dict]:
+    # Language isn't threaded through to this call site; default to es.
+    lang = "es"
+    api = f"https://{lang}.wikipedia.org/w/api.php"
+
+    try:
+        r = HTTP.get(
+            api,
+            params={
+                "action": "query",
+                "list": "search",
+                "format": "json",
+                "srsearch": query,
+                "srlimit": limit,
+            },
+            headers={"User-Agent": UA},
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+
+        hits = r.json().get("query", {}).get("search", [])
+        out = []
+
+        for hit in hits:
+            title = hit.get("title")
+            if not title:
+                continue
+
+            snippet = re.sub(r"<[^>]+>", "", hit.get("snippet", ""))
+            out.append(
+                {
+                    "url": f"https://{lang}.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}",
+                    "title": title,
+                    "snippet": snippet,
+                    "published": None,
+                }
+            )
+
+        return out
+    except Exception:
+        return []
+
+
 def fetch_pdf_text(url: str) -> str:
     try:
         from pypdf import PdfReader
@@ -595,6 +638,14 @@ def build_evidence_pack(
             raw.extend(search_web(q, time_range))
         except Exception:
             continue
+
+    wiki_injected = 0
+    for q in queries[:5]:
+        wiki_hits = search_wikipedia(q, limit=1)
+        raw.extend(wiki_hits)
+        wiki_injected += len(wiki_hits)
+
+    print(f"[build_evidence_pack] injected {wiki_injected} Wikipedia candidate(s) for task={task!r}")
 
     raw = dedupe(raw)
 
