@@ -987,6 +987,12 @@ Output ONLY valid JSON matching:
 }}
 
 Strict rules:
+- Set needs_web to false ONLY when either: (a) the task already contains all the
+  data it needs (extraction, transformation, formatting, arithmetic), or (b) it
+  asks about a generic concept with no proper noun in it.
+- Set needs_web to true whenever the task names a specific product, company,
+  person, event, standard, or version — facts about named things change over time,
+  even when the question sounds definitional.
 - Write queries in the same language as the task.
 - For subjective questions using "mejor", "más grande", "más importante", set answer_mode to consensus_candidates or nuanced_no_official_winner.
 - Do NOT require a single official winner for subjective questions.
