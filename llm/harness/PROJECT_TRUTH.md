@@ -52,6 +52,10 @@ Uncommitted, total:
 `.pre_strip`, `.bak_award_category`, `.pre_quote` etc., which is why 12 checkpoints
 show as untracked.
 
+**SUPERSEDED 2026-08-10 (see §17):** `git check-ignore -v research.py.pre_retryafter`
+returns `llm/harness/.gitignore:3:*.pre_*` — `.pre_*` backups ARE ignored correctly.
+The claim above is stale.
+
 **Other repos in home** (12 found, `find ~ -maxdepth 4 -name .git`): `de-journey`,
 `cripto-fintech`, `devops-prep`, `ciberseguridad-uniminuto`, `lane-detection`,
 `llama.cpp`, `gpu-burn`, `it87`, 2 Android projects, 2 Rust projects. **None contain
@@ -221,6 +225,7 @@ Recorded so they are not re-introduced.
 | "The executor service fix was applied (Aug 9)" | Never ran. Live unit is unchanged and is a regression from its own `.bak` |
 | "The 35B GGUF may lack MTP heads" | `nextn` + `draft` present in the header |
 | "`.gitignore` excludes `__pycache__`" | Harness `.gitignore` is two lines: `.webcache/`, `*.bak` |
+| **SUPERSEDED 2026-08-10 (see §17)** | `git check-ignore -v research.py.pre_retryafter` returns `llm/harness/.gitignore:3:*.pre_*` — `.pre_*` backups ARE ignored |
 | "Driver 580.159.03" | `nvidia-smi`: **595.84** |
 | "32GB RAM" | `free -h`: 30Gi usable, 8Gi swap |
 
@@ -478,5 +483,118 @@ silently measured a dead brain. Always verify the port answers before trusting
 output. Also: len(evidence_text)==149 was not an empty header — it was
 _empty_evidence's explanatory text, and printing it would have ended a
 multi-hour hunt in one minute.
+
+---
+
+## 17. SESSION LOG — 2026-08-10
+
+**ENGINE HEALTH RECOVERED**
+- SearXNG container was not running (`docker ps` returned nothing); it does not
+  autostart after reboot. `docker start searxng` revived it. Pending chore:
+  `docker update --restart unless-stopped searxng`.
+- Health probe: 37 results, engines contributing = brave, duckduckgo, google cse,
+  bing. `unresponsive_engines` = qwant (CAPTCHA), startpage (CAPTCHA) only. Last
+  night's near-total blockage was temporary. Measurement is unblocked.
+
+**THE 20-MINUTE STALL — FOUND AND FIXED**
+- An eval.py run blocked for >23 minutes on rock_co, the first web task. All 5
+  mechanicals had completed in 1 attempt (~1s executor, 4-5s judge). `ps` showed
+  %CPU 0.0, STAT Sl+, WCHAN futex_do_wait.
+- `ss -tnp` showed EVERY socket in CLOSE-WAIT with Recv-Q>0, including the local
+  ports 8090, 8091 and 8888. Remotes had closed; the process was not reading or
+  closing them. This ruled out "fetch waiting on a slow host" (that would show
+  ESTAB).
+- ROOT CAUSE, from `sudo .venv/bin/py-spy dump --pid <pid>`: two ThreadPoolExecutor
+  workers parked in `urllib3/util/retry.py:362 sleep_for_retry` — the Retry-After
+  branch, not the backoff branch — inside `fetch_html_text -> fetch_url_text ->
+  make_source`, while MainThread waited in `as_completed` with no timeout.
+- RETRY had `total=2`, `backoff_factor=0.4`, 429 in `status_forcelist`, and
+  `respect_retry_after_header` at its default `True`. Arithmetic rules out
+  backoff: 3 attempts x 12s WEB_TIMEOUT + 1.2s = ~37s worst case, vs a 20+ minute
+  stall. A rate-limited host returned 429 with a long Retry-After and urllib3
+  obeyed it literally.
+- FIX, commit `b8c6b4e` (`git show --stat b8c6b4e`: +9 -3): (1)
+  `respect_retry_after_header=False` in the RETRY block; (2)
+  `as_completed(future_to_url, timeout=TIMEOUT*4)` in the BASE
+  `build_evidence_pack`, catching `concurrent.futures.TimeoutError`, logging the
+  unfinished URLs, and continuing with the sources that completed.
+- CAVEAT, recorded explicitly: the two fixes are load-bearing TOGETHER. `with
+  ThreadPoolExecutor(...)` calls `shutdown(wait=True)` on exit, so the
+  `as_completed` timeout alone does not bound the block. Do not revert
+  `respect_retry_after_header` believing the timeout covers it.
+- Confirmation: no `"[build_evidence_pack] timed out"` line appeared in any
+  subsequent run. The Retry-After fix alone resolved it; the `as_completed`
+  timeout stands as a backstop. rock_co ran 53.4s and 48.5s where it had
+  consumed 20+ minutes.
+
+**BASELINE RE-ESTABLISHED ON HEALTHY ENGINES**
+- 9/10 (246.6s) and 10/10 (239.0s). Mechanicals 5/5 both runs, 1 attempt, src=0,
+  4.5-10.2s.
+- NOISE FLOOR: 1-2 web tasks wobble per run, a different task each time. lg2024
+  failed run 1 and passed run 2; comida did the reverse. A single suite score
+  cannot distinguish a regression from variance. Later runs showed the spread is
+  wider than it first appeared — 261.4s vs 193.8s between identical runs —
+  because one task escalating to 3 attempts costs ~40s.
+
+**WIKIPEDIA-FIRST — SHIPPED**
+- Design correction found by reading the code: `fetch_wikipedia_text` (~1313)
+  takes a URL, not a search term, and is ALREADY wired in — `fetch_url_text`
+  routes `wikipedia.org/wiki/` URLs through it. Fetching was never the gap. The
+  gap was candidate SUPPLY: Wikipedia pages only entered the pack when SearXNG
+  happened to return one, so when engines collapsed Wikipedia vanished with them.
+- Added `search_wikipedia(query, limit)` calling the Wikipedia search API
+  (`action=query&list=search`) directly, independent of SearXNG, injecting hits
+  into the raw candidate list before dedupe and ranking. Additive: SearXNG
+  collection unchanged. Returns `[]` on any exception.
+- `MAX_FETCH=6` is fixed and every task reports `src=6` before and after, so
+  Wikipedia DISPLACES rather than adds. At `limit=2`, up to 6 candidates were
+  injected on one task — enough to occupy every slot.
+- MEASURED, three-way: no Wikipedia 246.6s/239.0s (9/10, 10/10); `limit=2`
+  282.6s/275.0s (8/10, 9/10) — a reproducible +36s in both runs; `limit=1`
+  261.4s/193.8s (8/10, 10/10). `limit=1` chosen: the time penalty disappears and
+  injection drops to 1-3 per task.
+- The score drops at `limit=2` were VARIANCE, not regression: targeted re-runs
+  passed 4/4 (rock_co x2, comida x2, all ACCEPTED in 2 attempts). Method note:
+  web-task failures require targeted re-runs before being called a regression;
+  mechanical failures are deterministic and count on the first observation.
+- comida improved against baseline: chronically INCONCLUSIVE at 3 attempts
+  before, ACCEPTED at 2 in 4 of 5 observations after. That was the task whose
+  failure traced to Peruvian sources.
+- NOT PROVEN: the resilience benefit. All four engines were healthy all session,
+  so the change has never been observed doing the thing it was built for.
+  Measurement says it is cheap and does not hurt. The payoff remains a hypothesis
+  until engines degrade again.
+
+**METHOD / TOOLING NOTES**
+- `sudo .venv/bin/py-spy dump --pid <pid>` prints every thread's stack without
+  touching the process. Requires sudo (yama ptrace restriction); without it, it
+  prints NOTHING — no output, no error. Install with the venv's full pip path;
+  system pip refuses under PEP 668.
+- `eval_results.jsonl` is CUMULATIVE with no separator between runs. A `tail -10`
+  returned the PREVIOUS night's run and was briefly read as the current one.
+  Always check the last record's timestamp before trusting a tail. Pending
+  improvement: a run-id or separator per run.
+- `eval.py` does not flush per task, and `| tail -20` buffers all output until
+  the process exits, so a running suite shows NOTHING and a stall is
+  indistinguishable from progress. Use `| tee eval_run.log`. The real live
+  progress meter is `harness_log.jsonl`, which `log_record` writes per task.
+- Shadowing confirmed again by grep: `result_score` defined 5 times (live = last,
+  ~1895), `is_relevant_result` 3 times (live ~1863), `build_evidence_pack`
+  wrapped twice via `_orig_` chaining. The hardcoded Colombian-rock scoring at
+  ~1277-1316 (+40 for the rock_de_colombia URL, -25 for anything without
+  COLOMBIA_ROCK_TERMS) is DEAD, shadowed by later definitions. Flagged as a real
+  hazard: correctness depends on definition order, and any edit risks landing in
+  a corpse. Cleanup (delete shadowed definitions) belongs on the backlog.
+
+**NEXT WORK, in order:**
+1. Log SearXNG's unresponsive_engines per task. It is returned on every response
+   and currently discarded. This is also what would let us finally verify the
+   Wikipedia-first resilience claim.
+2. Re-try the relevance requirement in `is_relevant_result` (>=1 distinctive
+   query term in title+snippet+url) — reverted untested last night, now
+   measurable on healthy engines.
+3. Backlog: delete shadowed definitions in research.py; run-id in
+   eval_results.jsonl; per-task flush in eval.py; docker restart policy for
+   searxng.
 
 ---
