@@ -327,6 +327,9 @@ def plan_research(task: str) -> dict:
     }
 
 
+LAST_SEARCH_DIAGNOSTICS: dict = {}
+
+
 def search_searxng(query: str, time_range: str | None = None) -> list[dict]:
     params = {
         "q": query,
@@ -340,6 +343,7 @@ def search_searxng(query: str, time_range: str | None = None) -> list[dict]:
     key = "search:" + json.dumps(params, sort_keys=True)
     cached = cache_get(key, max_age_s=6 * 3600)
     if cached is not None:
+        LAST_SEARCH_DIAGNOSTICS[query] = {"source": "cached", "unresponsive_engines": None}
         return cached
 
     r = HTTP.get(
@@ -351,6 +355,10 @@ def search_searxng(query: str, time_range: str | None = None) -> list[dict]:
     r.raise_for_status()
 
     data = r.json()
+    LAST_SEARCH_DIAGNOSTICS[query] = {
+        "source": "live",
+        "unresponsive_engines": data.get("unresponsive_engines"),
+    }
     out = []
 
     for item in data.get("results", [])[:MAX_RESULTS]:
@@ -633,11 +641,15 @@ def build_evidence_pack(
     t0 = time.time()
     raw: list[dict] = []
 
+    LAST_SEARCH_DIAGNOSTICS.clear()
+
     for q in queries[:5]:
         try:
             raw.extend(search_web(q, time_range))
         except Exception:
             continue
+
+    search_diagnostics = {q: LAST_SEARCH_DIAGNOSTICS.get(q) for q in queries[:5]}
 
     wiki_injected = 0
     for q in queries[:5]:
@@ -646,6 +658,18 @@ def build_evidence_pack(
         wiki_injected += len(wiki_hits)
 
     print(f"[build_evidence_pack] injected {wiki_injected} Wikipedia candidate(s) for task={task!r}")
+
+    live_qs = [q for q, d in search_diagnostics.items() if d and d.get("source") == "live"]
+    cached_qs = [q for q, d in search_diagnostics.items() if d and d.get("source") == "cached"]
+    unresponsive = []
+    for d in search_diagnostics.values():
+        if d and d.get("source") == "live":
+            unresponsive.extend(d.get("unresponsive_engines") or [])
+    print(
+        f"[build_evidence_pack] engine health for task={task!r}: "
+        f"{len(live_qs)} live query(ies), {len(cached_qs)} cached (no fresh engine data); "
+        f"unresponsive_engines={unresponsive}"
+    )
 
     raw = dedupe(raw)
 
@@ -685,6 +709,7 @@ def build_evidence_pack(
         "evidence_text": evidence_text,
         "elapsed_s": round(time.time() - t0, 2),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "search_diagnostics": search_diagnostics,
     }
 
 
