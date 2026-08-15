@@ -399,15 +399,6 @@ def search_ddg(query: str) -> list[dict]:
         return []
 
 
-def search_web(query: str, time_range: str | None = None) -> list[dict]:
-    try:
-        results = search_searxng(query, time_range)
-        if results:
-            return results
-    except Exception:
-        pass
-
-    return search_ddg(query)
 
 
 def search_wikipedia(query: str, limit: int = 2) -> list[dict]:
@@ -1237,65 +1228,7 @@ Rules:
 - Do NOT answer the task. Only plan searches.
 """
 
-def is_relevant_result(item: dict, query: str) -> bool:
-    url = (item.get("url") or "").lower()
-    title = (item.get("title") or "").lower()
-    snippet = (item.get("snippet") or "").lower()
-    text = f"{title} {snippet} {url}"
-    q = (query or "").lower()
 
-    # Hard block known irrelevant pages.
-    if any(frag in url for frag in IRRELEVANT_URL_FRAGMENTS):
-        return False
-
-    # Block film/grammar false positives unless the query is actually about them.
-    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
-        allowed = (
-            "pelicula",
-            "película",
-            "peliculas",
-            "películas",
-            "cine",
-            "film",
-            "movie",
-            "gramatica",
-            "gramática",
-            "ortografia",
-            "ortografía",
-            "quien o quien",
-            "quién o quién",
-            "pronombre",
-        )
-        if not any(k in q for k in allowed):
-            return False
-
-    # For Colombian-rock queries, require Colombian-rock relevance.
-    if any(k in q for k in ("colombia", "colombiano", "colombiana", "rock colombiano", "rock de colombia", "rock nacional")):
-        return any(k in text for k in COLOMBIA_ROCK_TERMS)
-
-    return True
-
-def search_web(query: str, time_range: str | None = None) -> list[dict]:
-    raw = []
-
-    try:
-        raw = search_searxng(query, time_range)
-    except Exception:
-        raw = []
-
-    if not raw:
-        try:
-            raw = search_ddg(query)
-        except Exception:
-            raw = []
-
-    filtered = [item for item in raw if is_relevant_result(item, query)]
-
-    # Safety: if the filter removes everything, keep only a tiny raw fallback.
-    if not filtered and raw:
-        return raw[:2]
-
-    return filtered
 
 def fetch_wikipedia_text(url: str) -> str:
     parts = url.split("/wiki/")
@@ -1415,46 +1348,6 @@ Strict rules:
 - Do NOT answer the task.
 """
 
-def is_relevant_result(item: dict, query: str) -> bool:
-    url = (item.get("url") or "").lower()
-    title = (item.get("title") or "").lower()
-    snippet = (item.get("snippet") or "").lower()
-    text = f"{title} {snippet} {url}"
-    q = (query or "").lower()
-
-    if any(frag in url for frag in IRRELEVANT_URL_FRAGMENTS):
-        return False
-
-    if any(domain in url for domain in ("facebook.com", "twitter.com", "x.com", "instagram.com", "tiktok.com")):
-        return False
-
-    if "youtube.com/@" in url:
-        return False
-
-    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
-        allowed = (
-            "pelicula",
-            "película",
-            "peliculas",
-            "películas",
-            "cine",
-            "film",
-            "movie",
-            "gramatica",
-            "gramática",
-            "ortografia",
-            "ortografía",
-            "quien o quien",
-            "quién o quién",
-            "pronombre",
-        )
-        if not any(k in q for k in allowed):
-            return False
-
-    if any(k in q for k in ("colombia", "colombiano", "colombiana", "rock colombiano", "rock de colombia", "rock nacional")):
-        return any(k in text for k in COLOMBIA_ROCK_TERMS)
-
-    return True
 
 def search_web(query: str, time_range: str | None = None) -> list[dict]:
     raw = []
