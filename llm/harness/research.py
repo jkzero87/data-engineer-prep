@@ -575,19 +575,6 @@ def dedupe(items: list[dict]) -> list[dict]:
     return out
 
 
-def result_score(item: dict, query_terms: set[str]) -> float:
-    score = float(trust_score(item["url"]) * 10)
-
-    text = f"{item.get('title', '')} {item.get('snippet', '')}".lower()
-    score += 2.0 * sum(1 for t in query_terms if t and t in text)
-
-    if item.get("published"):
-        score += 3.0
-
-    if domain_of(item["url"]).endswith(".pdf"):
-        score += 1.0
-
-    return score
 
 
 def format_evidence(
@@ -965,46 +952,6 @@ def trust_score(url: str) -> int:
 
     return 1
 
-def result_score(item: dict, query_terms: set[str]) -> float:
-    url = item.get("url", "")
-    text = f"{item.get('title', '')} {item.get('snippet', '')}".lower()
-
-    score = float(trust_score(url) * 10)
-    score += 2.0 * sum(1 for t in query_terms if t and t in text)
-
-    if item.get("published"):
-        score += 3.0
-
-    d = domain_of(url)
-    if d.endswith(".co"):
-        score += 6.0
-
-    if any(k in text for k in ["colombia", "colombiano", "colombiana", "rock colombiano"]):
-        score += 8.0
-
-    non_colombian_signals = [
-        "los jaivas",
-        "los saicos",
-        "soda stereo",
-        "charly garcía",
-        "rock argentino",
-        "rock chileno",
-        "rock peruano",
-        "argentina",
-        "chile",
-        "perú",
-    ]
-
-    if any(k in text for k in non_colombian_signals):
-        if not any(k in query_terms for k in ["argentina", "chile", "peru", "perú", "latino", "latinoamérica", "latin"]):
-            score -= 6.0
-
-    if any(k in text for k in ["latino", "latinoamérica", "latin america", "rock latino"]):
-        if not any(k in query_terms for k in ["latino", "latinoamérica", "latin"]):
-            score -= 3.0
-
-    return score
-
 def _clean_model_text(content: str) -> str:
     content = content or ""
     content = re.sub(r"<think>.*?</think>", " ", content, flags=re.S | re.I)
@@ -1350,50 +1297,6 @@ def search_web(query: str, time_range: str | None = None) -> list[dict]:
 
     return filtered
 
-def result_score(item: dict, query_terms: set[str]) -> float:
-    url = (item.get("url") or "").lower()
-    title = (item.get("title") or "").lower()
-    snippet = (item.get("snippet") or "").lower()
-    text = f"{title} {snippet} {url}"
-
-    score = float(trust_score(url) * 8)
-
-    useful_terms = {
-        t for t in query_terms
-        if len(t) > 3 and t not in STOP_TERMS
-    }
-
-    score += 3.0 * sum(1 for t in useful_terms if t in text)
-
-    if "rock de colombia" in text or "rock colombiano" in text:
-        score += 30.0
-
-    if "rock en colombia" in text or "rock nacional colombia" in text:
-        score += 20.0
-
-    if "banda de rock colombiana" in text or "bandas de rock colombianas" in text:
-        score += 25.0
-
-    if "banda de rock colombia" in text or "bandas de rock de colombia" in text:
-        score += 20.0
-
-    if domain_of(url).endswith(".co"):
-        score += 12.0
-
-    if "es.wikipedia.org/wiki/rock_de_colombia" in url:
-        score += 40.0
-
-    if any(k in text for k in COLOMBIA_ROCK_TERMS):
-        score += 10.0
-
-    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
-        score -= 80.0
-
-    if not any(k in text for k in COLOMBIA_ROCK_TERMS):
-        score -= 25.0
-
-    return score
-
 def fetch_wikipedia_text(url: str) -> str:
     parts = url.split("/wiki/")
     if len(parts) < 2:
@@ -1580,83 +1483,6 @@ def search_web(query: str, time_range: str | None = None) -> list[dict]:
 
     return filtered
 
-def result_score(item: dict, query_terms: set[str]) -> float:
-    url = (item.get("url") or "").lower()
-    title = (item.get("title") or "").lower()
-    snippet = (item.get("snippet") or "").lower()
-    text = f"{title} {snippet} {url}"
-    domain = domain_of(url)
-
-    score = float(trust_score(url) * 8)
-
-    useful_terms = {
-        t for t in query_terms
-        if len(t) > 3 and t not in STOP_TERMS
-    }
-
-    score += 3.0 * sum(1 for t in useful_terms if t in text)
-
-    if "rock de colombia" in text or "rock colombiano" in text:
-        score += 30.0
-
-    if "rock en colombia" in text or "rock nacional colombia" in text:
-        score += 20.0
-
-    if "banda de rock colombiana" in text or "bandas de rock colombianas" in text:
-        score += 25.0
-
-    if "banda de rock colombia" in text or "bandas de rock de colombia" in text:
-        score += 20.0
-
-    if "es.wikipedia.org/wiki/rock_de_colombia" in url:
-        score += 80.0
-
-    if domain == "radionica.rocks" or domain.endswith(".radionica.rocks"):
-        score += 30.0
-
-    if domain == "canalcapital.gov.co" or domain.endswith(".canalcapital.gov.co"):
-        score += 25.0
-
-    if domain.endswith(".co"):
-        score += 12.0
-
-    if "aterciopelados" in text:
-        score += 14.0
-
-    if "1280 almas" in text:
-        score += 10.0
-
-    if "kraken" in text:
-        score += 8.0
-
-    if "la pestilencia" in text:
-        score += 8.0
-
-    if "diamante eléctrico" in text or "diamante electrico" in text:
-        score += 8.0
-
-    if "estados alterados" in text:
-        score += 6.0
-
-    if any(k in text for k in COLOMBIA_ROCK_TERMS):
-        score += 10.0
-
-    if any(k in text for k in NON_COLOMBIAN_OR_NOT_ROCK_SIGNALS):
-        if any(k in text for k in COLOMBIA_ROCK_TERMS):
-            score -= 8.0
-        else:
-            score -= 70.0
-
-    if any(k in text for k in IRRELEVANT_TEXT_TERMS):
-        score -= 100.0
-
-    if any(s in url for s in ("facebook.com", "youtube.com/@", "twitter.com", "x.com", "instagram.com", "tiktok.com")):
-        score -= 150.0
-
-    if not any(k in text for k in COLOMBIA_ROCK_TERMS):
-        score -= 30.0
-
-    return score
 
 def _source_priority(s) -> int:
     url = (getattr(s, "url", "") or "").lower()
@@ -1813,38 +1639,6 @@ Strict rules:
 - Do NOT answer the task.
 """
 
-_original_result_score = result_score
-
-def result_score(item: dict, query_terms: set[str]) -> float:
-    score = _original_result_score(item, query_terms)
-
-    url = (item.get("url") or "").lower()
-    title = (item.get("title") or "").lower()
-    snippet = (item.get("snippet") or "").lower()
-    text = f"{title} {snippet} {url}"
-
-    years = {t for t in query_terms if isinstance(t, str) and t.isdigit() and len(t) == 4}
-
-    if years:
-        if any(y in text for y in years):
-            score += 35.0
-        else:
-            score -= 25.0
-
-    if any(k in query_terms for k in ("2024",)):
-        if any(k in text for k in ("25th", "25ª", "25a", "25 edición", "vigésima quinta", "vigesima quinta")):
-            score += 20.0
-
-        if any(k in text for k in ("26th", "26ª", "26a", "26 edición")) and "2024" in text:
-            score -= 10.0
-        elif any(k in text for k in ("26th", "26ª", "26a", "26 edición")):
-            score -= 35.0
-
-    if any(k in query_terms for k in ("2025",)):
-        if any(k in text for k in ("26th", "26ª", "26a", "26 edición", "2025")):
-            score += 20.0
-
-    return score
 # --- END PATCH 6 ---
 
 # --- PATCH 7: generic topic relevance ---
