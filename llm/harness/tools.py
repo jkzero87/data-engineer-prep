@@ -15,6 +15,8 @@ def _safe(p):
     q = q.resolve()
     if q != ROOT and ROOT not in q.parents:
         raise ValueError(f"fuera del sandbox: {q}")
+    if not q.exists():
+        raise ValueError(f"no existe: {q} (las rutas relativas se resuelven desde {ROOT})")
     return q
 
 def list_dir(path="."):
@@ -24,16 +26,29 @@ def list_dir(path="."):
         items.append(f"{'d' if e.is_dir() else '-'} {e.stat().st_size:>10} {e.name}")
     return "\n".join(items) or "(vacío)"
 
-def read_file(path, max_chars=MAX_CHARS):
+def read_file(path, start_line=None, end_line=None):
     f = _safe(path)
     txt = f.read_text(errors="replace")
-    return txt[:max_chars] + ("\n...[truncado]" if len(txt) > max_chars else "")
+    if start_line is not None and end_line is not None:
+        lines = txt.split("\n")
+        selected = lines[start_line - 1:end_line]
+        txt = "\n".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+    truncated = len(txt) > MAX_CHARS
+    txt = txt[:MAX_CHARS]
+    if truncated:
+        txt += "\n[TRUNCADO en 4000 chars. Usa start_line y end_line para leer un rango]"
+    return txt
 
 def grep_files(pattern, path="."):
     d = _safe(path)
-    out = subprocess.run(["grep","-rn","--binary-files=without-match","-m","5",pattern,str(d)],
+    out = subprocess.run(["grep","-rn","--binary-files=without-match","-m","200",pattern,str(d)],
                          capture_output=True, text=True, timeout=30)
-    return (out.stdout or "(sin coincidencias)")[:MAX_CHARS]
+    result = out.stdout or "(sin coincidencias)"
+    truncated = len(result) > MAX_CHARS or result.count("\n") >= 200
+    result = result[:MAX_CHARS]
+    if truncated:
+        result += "\n[RESULTADO TRUNCADO: puede haber mas coincidencias]"
+    return result
 
 def run_safe_bash(cmd):
     first = cmd.strip().split()[0] if cmd.strip() else ""
@@ -48,7 +63,7 @@ TOOLS = {"list_dir": list_dir, "read_file": read_file,
 SYSTEM = """You are a local assistant on the user's Linux PC. Answer using ONLY real tool output.
 Available tools:
 - list_dir(path)            list a directory
-- read_file(path)           read a text file
+- read_file(path, start_line, end_line)  read a text file, optionally a line range
 - grep_files(pattern, path) search text recursively
 - run_safe_bash(cmd)        safe read-only commands (ls, df, git, systemctl, nvidia-smi, ...)
 
@@ -60,7 +75,9 @@ Never invent file contents or command output."""
 def local_task(task, max_steps=5, verbose=True):
     history = ""
     for step in range(1, max_steps + 1):
-        user = f"Task: {task}\n\nObservations so far:\n{history or '(none)'}\n\nReturn only JSON."
+        remaining = max_steps - step + 1
+        urgency = "\nThis is your LAST step. You MUST set done=true and answer with what you have." if remaining == 1 else f"\nYou have {remaining} tool calls left. If you already have enough evidence, set done=true now."
+        user = f"Task: {task}\n\nObservations so far:\n{history or '(none)'}\n\nStep {step} of {max_steps}.{urgency}\n\nReturn only JSON."
         plan = llm_json(BRAIN_PORT, SYSTEM, user, temp=0.1, max_tokens=900)
         if not isinstance(plan, dict):
             return {"status": "ERROR", "answer": f"plan inválido: {plan}"}

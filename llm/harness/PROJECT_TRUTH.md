@@ -89,18 +89,22 @@ I.5, item 1).
 
 Keep the reason attached to each item:
 
-1. Harden `run_safe_bash` BEFORE granting write power (validates only the first word,
+1. **REPLAY MODE (added 2026-08-15, priority 1, reported by Juan).** Record
+   evidence packs to a fixture and replay them to test code without touching the
+   internet. Not yet built; no command backs this line, it is a backlog addition
+   only.
+2. Harden `run_safe_bash` BEFORE granting write power (validates only the first word,
    then `shell=True`, so `ls; rm -rf ~` passes).
-2. Line-range reading in `read_file` (`local_task` accumulates observations; a full
+3. Line-range reading in `read_file` (`local_task` accumulates observations; a full
    dump pollutes every later step).
-3. Write tools with a safety net: `write_file` and `delete_lines`, each with
+4. Write tools with a safety net: `write_file` and `delete_lines`, each with
    timestamped backup and `dry_run=True` BY DEFAULT, returning the proposed diff
    without touching disk.
-4. Widen the allowlist to `cp`, `diff`, `python -c` — today the agent cannot back up,
+5. Widen the allowlist to `cp`, `diff`, `python -c` — today the agent cannot back up,
    check syntax, or show its own diff.
-5. Escalation policy for destructive ops: the 4B may PROPOSE; any write deleting more
+6. Escalation policy for destructive ops: the 4B may PROPOSE; any write deleting more
    than N lines requires the 35B to review the diff.
-6. An eval for the agent itself. Capability that cannot be measured cannot be
+7. An eval for the agent itself. Capability that cannot be measured cannot be
    trusted. First controlled test already designed: ask it in dry-run to identify the
    dead definitions in research.py and compare against the grep truth. The hard part
    is whether it flags `build_evidence_pack` as CHAINED (do not delete) rather than
@@ -182,6 +186,47 @@ as permanent):
   `ThreadPoolExecutor`/`as_completed` logic) plus two wrappers chained via
   `_orig_bep_*` — a quoting wrapper and a query-cap wrapper. Confirmed working, not
   dead: this is the enforcement point for the 3-query cap.
+
+**Shadowing cleanup, 2026-08-15 — SUPERSEDES the counts above.** Dead definitions
+removed by the local agent (`llm/agente-local`), commits `7702d58` ("Remove all five
+shadowed result_score definitions") and `609d1e9` ("Remove shadowed
+is_relevant_result and search_web definitions"; commit message says "Four dead
+definitions removed", i.e. two of each). 5+2+2 = 9 dead definitions total (reported
+by Juan; the 5/2/2 split is not broken out in the commit messages themselves, only
+the per-commit totals of 5 and 4). `grep -c '^def result_score\|^def
+is_relevant_result\|^def search_web' research.py`, VERIFIED 2026-08-15:
+```
+$ grep -c "^def result_score" research.py
+1
+$ grep -c "^def is_relevant_result" research.py
+1
+$ grep -c "^def search_web" research.py
+1
+```
+Each symbol now has exactly one definition — live lines (VERIFIED 2026-08-15,
+`grep -n`, will shift with future edits): `search_web` 1352, `is_relevant_result`
+1626, `result_score` 1658. `ast.parse` and `import research` both succeed and all
+three names are callable (VERIFIED 2026-08-15, this session). The 609d1e9 commit
+message additionally claims `result_score` unchanged at 55.0 and the
+`build_evidence_pack`/`format_evidence` chains intact after the cleanup — not
+reproduced independently this session, taken from the commit message only.
+
+**`format_evidence` is CHAINED, not a shadowed duplicate — correction, 2026-08-15**
+(reported by Juan; it was not flagged as chained anywhere above). `grep -n
+"_original_format_evidence\|^def format_evidence"`, VERIFIED 2026-08-15:
+```
+571:def format_evidence(
+1416:_original_format_evidence = format_evidence
+1418:def format_evidence(task, sources, claims=None):
+1420:    return _original_format_evidence(task, sources, claims)
+```
+Base definition at 571, saved as `_original_format_evidence` at 1416, wrapper at
+1418 calls the original at 1420. Deleting the base (571) without the wrapper would
+break the harness — this is the same `_orig_` chain hazard already known for
+`build_evidence_pack` above, just not previously named for `format_evidence`.
+Separately, `_original_result_score` no longer exists anywhere in the file (`grep
+-c "_original_result_score" research.py` → 0, VERIFIED 2026-08-15) — it was removed
+along with its dead wrapper as part of the `result_score` cleanup.
 
 **`is_relevant_result` root cause** (found 2026-08-09 night): it is a BLOCKLIST, not
 a relevance test. The live definition returns True unless the url or text matches
@@ -304,6 +349,19 @@ file) — but the file is uncommitted, so it exists only on this machine.
   37 results, engines contributing = brave, duckduckgo, google cse, bing;
   unresponsive_engines = qwant (CAPTCHA), startpage (CAPTCHA) only. The near-total
   blockage from the night before was temporary; measurement was unblocked.
+
+**Engine status, 2026-08-15 session (reported by Juan, not independently verified
+this session — no command run here against SearXNG/the engines).** A workaround
+(solving the CAPTCHA in a browser from the same IP, then `docker restart`) recovers
+brave and duckduckgo, but only for minutes — both fall over again within the first
+task of the next suite run. qwant returns a hard 403. startpage answers in a
+browser but not via SearXNG. google cse is API-quota limited, not a health problem.
+
+**Web-task failure predictor, 2026-08-15 session (reported by Juan, cross-referencing
+five runs; not independently verified this session).** A web task fails when its
+retry's evidence pack comes back 0 live / 3 cached sources. Profile, context size,
+and MTP were each tested as possible causes and ruled out — none correlated with the
+failure; the 0-live/3-cached pack composition did.
 
 **Wikipedia-first floor, shipped 2026-08-10** (full fix detail in §II.5): guarantees
 a Wikipedia candidate independent of SearXNG health. **NOT PROVEN as of 2026-08-10:**
@@ -534,6 +592,20 @@ Rule adopted: no fix commits unless the full suite holds or improves.
   (239.0s). Mechanicals 5/5 both runs, 1 attempt, src=0, 4.5-10.2s.
 - 2026-08-10, Wikipedia-first at `limit=2`: 8/10 (282.6s), 9/10 (275.0s).
 - 2026-08-10, Wikipedia-first at `limit=1` (shipped): 8/10 (261.4s), 10/10 (193.8s).
+- 2026-08-15, single-model harness — Qwen3.8-27B alone serving both executor and
+  brain roles on port 8092 (the `llm/agente-local` model; a different architecture
+  from the two-model 8090/8091 split described elsewhere in this file): 10/10, twice
+  (reported by Juan, not independently verified this session — not reproduced with a
+  command here). Reported requirement: `HARNESS_JUDGE_MAX_TOKENS=3000` — at the
+  codebase default of 900 the judge returns empty content. `grep -n
+  HARNESS_JUDGE_MAX_TOKENS agent_v2.py`, VERIFIED 2026-08-15, confirms the env var is
+  real and its coded default is 900:
+  ```
+  53:JUDGE_MAX_TOKENS = int(os.getenv("HARNESS_JUDGE_MAX_TOKENS", "900"))
+  ```
+  The empty-content-at-900 behavior itself and the ~40% mechanics slowdown reported
+  under a short-context profile are not verified this session, taken from Juan's
+  report only.
 
 **Noise floor, characterized 2026-08-10:** 1-2 web tasks wobble per run, a different
 task each time — lg2024 failed run 1 and passed run 2 in one pair; comida did the
