@@ -302,6 +302,13 @@ item 1.
   with different failures each, but the reverted baseline also came back 9/10, so
   the change could not be distinguished from engine noise (2026-08-09 night). Now
   measurable on healthy engines (§II.4).
+- **No model-swap layer (OPEN, added 2026-08-16, reported by Juan).** Design rule:
+  suach's two models are never both resident — one is active, the other is woken on
+  demand, to avoid fighting over VRAM and context. This is the same automatic-routing
+  behaviour that defines the suach arm (see `llm/PROYECTO.md` §3). `agent_v2.py`
+  currently assumes both ports are live; nothing wakes/sleeps a model. `chimi`'s
+  `agent/server.py` `ensure(profile)` is the existing precedent for this pattern.
+  Recorded as a known gap; not built.
 - **`harness_log.jsonl` contents** — not parsed as of the 2026-08-09 baseline. Prior
   reading suggested it contains statuses the current code cannot emit, meaning it
   mixes eras.
@@ -320,6 +327,8 @@ item 1.
   - Fix both service units — executor needs its lost flags back; supervisor needs
     `--parallel 1` decided one way or the other (§II.7). Originally logged
     2026-08-09, not yet done as of the last verification.
+    **RESOLVED 2026-08-16** — see the "Systemd units — CORRECTED 2026-08-16" block
+    in §II.7. Both units recertified; `--parallel 1` decided (on, for both).
   - Commit `tools.py` and the SearXNG settings — as of 2026-08-09 they existed only
     on this machine, untracked.
 
@@ -544,6 +553,61 @@ probe: BOTH models returned empty `content` at `max_tokens=300` (whole budget sp
 in `reasoning_content`) — not yet a confirmed production bug, since production uses
 900 (`HARNESS_EXECUTOR_MAX_TOKENS_LIMIT`); retest at 900 was pending as of that
 session.
+
+**Systemd units — CORRECTED 2026-08-16 (reported by Juan as verified by command
+today; not independently reproduced in this session).** The units above are the
+2026-08-09 baseline and stay as the historical record. As of today the live units at
+`~/.config/systemd/user/` are `suach-executor.service` and `suach-supervisor.service`
+(new names; the `harness-*` unit files still exist on disk but are no longer the
+ones systemd runs — see the PENDING note below). Copies of both current files are
+checked into `backups/systemd/`; the July 2026 copies were renamed with a
+`.july2026` suffix rather than deleted, so the record shows what changed.
+
+**Design rule this session corrected toward:** the two suach models are NOT both
+resident. One is active; the other is woken on demand — the same automatic-routing
+behaviour that defines the suach arm. See the "No model-swap layer" entry in §II.3:
+the code to do this waking/sleeping does not exist yet, so today's units are
+certified for manual/current use, not for the swap design end-state.
+
+`suach-executor.service` (4B, port 8090), CERTIFIED:
+```
+llama-server -m ~/models/Qwen3.5-4B-MTP-UD-Q4_K_XL.gguf --host 127.0.0.1 --port 8090
+  -ngl 99 -fa on --ctx-size 8192 -t 6 --parallel 1 --reasoning off
+  --spec-type draft-mtp --spec-draft-n-max 2
+```
+VERIFIED LIVE: 172.6 t/s, `draft_n` 102 / accepted 93, `content` 493 chars
+(non-empty). The old unit (see above, `harness-executor.service` LIVE at
+2026-08-09) gave ~110 t/s with no `draft_n` field at all.
+
+`suach-supervisor.service` (35B, port 8091), CERTIFIED: same flag set as the
+executor plus `--n-cpu-moe 17`.
+
+**The `--n-cpu-moe` correction — a method lesson, not just a number.** `17` was
+measured with the 35B ALONE (15430/16311 MiB). With the 4B also resident (3679 MiB),
+`--n-cpu-moe 17` requested 13381 MiB for the 35B and died with `cudaMalloc failed:
+out of memory`, restart-looping. `--n-cpu-moe 27` was separately measured to work
+for COEXISTENCE (13466 MiB total, both models resident) — this is the number in the
+2026-08-09 `harness-supervisor.service` above and in Appendix A. But coexistence is
+NOT the chosen design (see the design rule above): the two models are meant to never
+both be resident, so `17` is the correct value for the design actually being built.
+The two numbers were previously recorded without saying which design each belonged
+to, which is what caused a wrong decision earlier today — this paragraph exists to
+close that gap.
+
+**What was actually wrong with the OLD supervisor unit** (i.e. the
+`harness-supervisor.service` LIVE unit documented above, 2026-08-09): no
+`--parallel 1` (default 4; and MTP does not work with `-np`/parallel >1, so
+`--spec-type draft-mtp` was likely doing nothing); no `--reasoning off` — the
+serious one, since without it the 35B burns its token budget on reasoning and
+returns empty `content`; no `-t 6`; no `--host`. Its `--n-cpu-moe 27` was NOT a
+defect — see the correction above; it was right for a design that isn't the one
+being built.
+
+**STILL PENDING, 2026-08-16 (reported by Juan):** `~/.zshrc`'s `jkhelper()` still
+starts `harness-executor` and `harness-supervisor` by their old names, and starts
+BOTH — which contradicts the one-active-at-a-time design rule above. The old
+`harness-*.service` unit files at `~/.config/systemd/user/` still exist. Neither
+`jkhelper` nor the old unit files have been changed as of this entry.
 
 **Environment** (`grep -n 'HARNESS\|WEB_\|SEARXNG\|PORT\|jkhelper' ~/.zshrc`,
 VERIFIED 2026-08-09):

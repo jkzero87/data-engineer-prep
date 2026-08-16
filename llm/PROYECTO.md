@@ -57,6 +57,10 @@ point of the experiment is to find out, not to defend either side.
 | **suach** | two coordinated models, automatic escalation | 4B executor + 35B-A3B brain + web search |
 | **chimi** | one model, the largest that performs | Qwen3.8-27B dense with local tools |
 
+In suach the two models are never both resident — one is active, the other wakes on
+demand. That routing *is* the automatic-escalation claim being tested, not an
+implementation detail of it.
+
 The axis that separates them is **model count and routing** — not capability domain.
 Both arms will eventually need local files *and* internet. Any difference in what they
 can do today is a difference in maturity, not in design.

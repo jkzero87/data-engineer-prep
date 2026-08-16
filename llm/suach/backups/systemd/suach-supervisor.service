@@ -1,0 +1,11 @@
+[Unit]
+Description=suach supervisor (Qwen3.6-35B MTP)
+After=network.target
+
+[Service]
+ExecStart=/home/jkzero/llama.cpp/build/bin/llama-server -m /home/jkzero/models/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf --host 127.0.0.1 --port 8091 -ngl 99 --n-cpu-moe 17 -fa on -c 8192 -t 6 --parallel 1 --reasoning off --spec-type draft-mtp --spec-draft-n-max 2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
