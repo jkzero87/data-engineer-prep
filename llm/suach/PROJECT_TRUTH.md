@@ -582,6 +582,15 @@ VERIFIED LIVE: 172.6 t/s, `draft_n` 102 / accepted 93, `content` 493 chars
 `suach-supervisor.service` (35B, port 8091), CERTIFIED: same flag set as the
 executor plus `--n-cpu-moe 17`.
 
+VERIFIED LIVE (2026-08-16, reported by Juan): 73.4 t/s, `draft_n` 22 / accepted 22,
+`content` 142 chars, `reasoning_len` 0, 14445 MiB loaded alone. The `reasoning_len`
+of 0 with non-empty `content` is the significant result: it is the July failure
+mode (3044 chars of reasoning, empty content) no longer occurring, which is what
+`--reasoning off` is for. `draft_n` present confirms MTP is active, which it was
+not without `--parallel 1`. 73.4 sits on the certified 74.5 within run-to-run
+noise. Note also that 14445 MiB is ~1 GB below July's 15430 at the same flag
+because that measurement had the desktop on the dGPU.
+
 **The `--n-cpu-moe` correction — a method lesson, not just a number.** `17` was
 measured with the 35B ALONE (15430/16311 MiB). With the 4B also resident (3679 MiB),
 `--n-cpu-moe 17` requested 13381 MiB for the 35B and died with `cudaMalloc failed:
