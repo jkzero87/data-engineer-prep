@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-agent_v2.py — Worker/supervisor harness with deterministic web evidence.
+agent_v2.py — Worker/supervisor suach with deterministic web evidence.
 
 Contract:
     run_task(task: str, on_draft=None) -> dict

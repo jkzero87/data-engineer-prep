@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-research.py — deterministic web evidence layer for the harness.
+research.py — deterministic web evidence layer for suach.
 
 This module gives your worker/supervisor pipeline a real internet-search tool:
 - brain plans queries

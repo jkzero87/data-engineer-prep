@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-harness_chat.py — Interactive REPL for the harness (Claude Code style).
+suach_chat.py — Interactive REPL for suach (Claude Code style).
 
 Type a question, el pipeline ejecutante/cerebro responde, repeat.
 Commands:  /exit  quit   |   /last  show full detail of the last run

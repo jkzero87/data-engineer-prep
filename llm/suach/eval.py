@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-eval.py — deterministic evaluation suite for the harness.
+eval.py — deterministic evaluation suite for suach.
 
 No LLM judges these results. Every check is a string/JSON comparison against
 run_task()'s output. Run with: python3 eval.py [--only <id>]
@@ -199,7 +199,7 @@ def run_one(spec: dict) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Deterministic harness eval suite")
+    parser = argparse.ArgumentParser(description="Deterministic suach eval suite")
     parser.add_argument("--only", help="run a single task id")
     args = parser.parse_args()
 

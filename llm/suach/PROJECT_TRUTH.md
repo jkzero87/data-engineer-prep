@@ -1,6 +1,6 @@
-# PROJECT TRUTH — Local Dual-Agent Harness
+# PROJECT TRUTH — Local Dual-Agent Suach
 
-**Path:** `/home/jkzero/data-engineer-prep/llm/harness`
+**Path:** `/home/jkzero/data-engineer-prep/llm/suach`
 **Machine:** `jkzero-A520M-DS3H`
 **Evidence baseline:** `harness_evidence_20260809_1506.txt`, generated 2026-08-09T15:06:17-05:00
 
@@ -145,7 +145,7 @@ Uncommitted as of 2026-08-09:
 ```
 
 **Code location.** `find ~ -type f \( -name 'agent_v2*' -o -name 'research*.py' -o
-... \)` + sha256, VERIFIED 2026-08-09. Exactly one copy of the harness; every other
+... \)` + sha256, VERIFIED 2026-08-09. Exactly one copy of suach (then harness); every other
 hit was a library `tools.py` in site-packages:
 
 | sha256 (12) | Bytes | Modified | File |
@@ -171,7 +171,7 @@ research.py.pre_retryafter` (2026-08-10) returns
 **Other repos in home** (12 found, `find ~ -maxdepth 4 -name .git`, 2026-08-09):
 `de-journey`, `cripto-fintech`, `devops-prep`, `ciberseguridad-uniminuto`,
 `lane-detection`, `llama.cpp`, `gpu-burn`, `it87`, 2 Android projects, 2 Rust
-projects. None contain harness code.
+projects. None contain suach (then harness) code.
 
 **Shadowing in research.py.** `grep -n '^def <name>'`, VERIFIED 2026-08-10 (line
 numbers current as of today's edits — they shift with every patch, do not treat them
@@ -188,7 +188,7 @@ as permanent):
   dead: this is the enforcement point for the 3-query cap.
 
 **Shadowing cleanup, 2026-08-15 — SUPERSEDES the counts above.** Dead definitions
-removed by the local agent (`llm/agente-local`), commits `7702d58` ("Remove all five
+removed by the local agent (`llm/chimi`), commits `7702d58` ("Remove all five
 shadowed result_score definitions") and `609d1e9` ("Remove shadowed
 is_relevant_result and search_web definitions"; commit message says "Four dead
 definitions removed", i.e. two of each). 5+2+2 = 9 dead definitions total (reported
@@ -593,7 +593,7 @@ Rule adopted: no fix commits unless the full suite holds or improves.
 - 2026-08-10, Wikipedia-first at `limit=2`: 8/10 (282.6s), 9/10 (275.0s).
 - 2026-08-10, Wikipedia-first at `limit=1` (shipped): 8/10 (261.4s), 10/10 (193.8s).
 - 2026-08-15, single-model harness — Qwen3.8-27B alone serving both executor and
-  brain roles on port 8092 (the `llm/agente-local` model; a different architecture
+  brain roles on port 8092 (the `llm/chimi` model; a different architecture
   from the two-model 8090/8091 split described elsewhere in this file): 10/10, twice
   (reported by Juan, not independently verified this session — not reproduced with a
   command here). Reported requirement: `HARNESS_JUDGE_MAX_TOKENS=3000` — at the
