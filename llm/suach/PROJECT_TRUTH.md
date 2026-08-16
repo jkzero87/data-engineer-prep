@@ -559,7 +559,7 @@ the pre-zsh fix; divergence risk if the shell ever differs. No
 `HARNESS_ENABLE__*` variable is set anywhere, so patches 8, 9 and 10 in agent_v2.py
 are dormant — present in committed code, never executing. `jkhelper`
 (`~/.zshrc:744`) starts both units, `docker start searxng`, cd + venv activate, runs
-`harness_chat.py`, traps INT/TERM to stop services on exit — no error handling, so a
+`suach_chat.py`, traps INT/TERM to stop services on exit — no error handling, so a
 failed service or container still lets the REPL launch against dead ports. venv:
 `llm/harness/.venv`, Python 3.14.4; key packages: requests 2.34.2, trafilatura 2.1.0,
 ddgs 9.14.4, beautifulsoup4, lxml, json_repair, pypdf.
