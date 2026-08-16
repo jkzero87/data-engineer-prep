@@ -3,3 +3,5 @@
 *.pre_*
 *.bak_*
 __pycache__/
+*.log
+*.bak[0-9]
