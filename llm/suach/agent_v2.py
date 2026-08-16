@@ -50,7 +50,7 @@ JUDGE_TEMP = float(os.getenv("HARNESS_JUDGE_TEMP", "0.0"))
 BRAIN_TEMP = float(os.getenv("HARNESS_BRAIN_TEMP", "0.1"))
 
 EXECUTOR_MAX_TOKENS = int(os.getenv("HARNESS_EXECUTOR_MAX_TOKENS", "1200"))
-JUDGE_MAX_TOKENS = int(os.getenv("HARNESS_JUDGE_MAX_TOKENS", "900"))
+JUDGE_MAX_TOKENS = int(os.getenv("HARNESS_JUDGE_MAX_TOKENS", "3000"))
 BRAIN_MAX_TOKENS = int(os.getenv("HARNESS_BRAIN_MAX_TOKENS", "1600"))
 
 LOG_FILE = Path(os.getenv("HARNESS_LOG", "harness_log.jsonl"))

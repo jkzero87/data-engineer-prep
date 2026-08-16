@@ -55,10 +55,10 @@ BRAIN_PORT = int(os.getenv("BRAIN_PORT", "8091"))
 EXECUTOR_PORT = int(os.getenv("EXECUTOR_PORT", "8090"))
 
 TIMEOUT = float(os.getenv("WEB_TIMEOUT", "12"))
-MAX_RESULTS = int(os.getenv("WEB_MAX_RESULTS", "10"))
+MAX_RESULTS = int(os.getenv("WEB_MAX_RESULTS", "12"))
 MAX_FETCH = int(os.getenv("WEB_MAX_FETCH", "6"))
 MAX_CHARS_PER_SOURCE = int(os.getenv("WEB_MAX_CHARS_PER_SOURCE", "1800"))
-MAX_EVIDENCE_CHARS = int(os.getenv("WEB_MAX_EVIDENCE_CHARS", "12000"))
+MAX_EVIDENCE_CHARS = int(os.getenv("WEB_MAX_EVIDENCE_CHARS", "10000"))
 
 CACHE_DIR = Path(os.getenv("WEB_CACHE_DIR", ".webcache"))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
