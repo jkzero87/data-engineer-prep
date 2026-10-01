@@ -20,9 +20,6 @@ sql/scratch/
 
 # Python virtual environments
 analyst-env/
-.venv/
-__pycache__/
-*.pyc
 
 # Data files - never commit datasets to the repo
 *.csv
@@ -31,10 +28,8 @@ data/
 datasets/
 
 # Environment secrets
-.env
 python/logs/
 python/data/
 python/jira-analysis/outputs/
 *.mp4
-__pycache__/
 *.jsonl
