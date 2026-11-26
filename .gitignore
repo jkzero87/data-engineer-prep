@@ -38,3 +38,6 @@ python/jira-analysis/outputs/
 *.mp4
 __pycache__/
 *.jsonl
+
+# Ad-hoc copies of scripts
+*_backup.py
